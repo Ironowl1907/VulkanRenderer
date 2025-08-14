@@ -9,6 +9,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(Renderer main.cpp)
 
+add_custom_target(run
+  COMMAND ./build/Renderer
+  DEPENDS Renderer
+  WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+)
+
 target_link_libraries(Renderer
     glfw
     vulkan
