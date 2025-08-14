@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 4.0)
 project(VulkanRenderer)
 
 # Dependencies
-include_directories(vendor/stb_image)
-include_directories(vendor/tiny_obj_loader)
+# include_directories(vendor/stb_image)
+# include_directories(vendor/tiny_obj_loader)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
