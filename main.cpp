@@ -73,21 +73,35 @@ private:
         m_PhysicalDevice.getQueueFamilyProperties();
 
     auto graphicsQueueFamilyProperty = queueFamilyProperties.end();
-
     for (auto it = queueFamilyProperties.begin();
          it != queueFamilyProperties.end(); ++it) {
       if (it->queueFlags & vk::QueueFlagBits::eGraphics) {
-        graphicsQueueFamilyProperty = it;
-        break;
+
+        // Check if this graphics queue family also supports presentation
+        auto index = static_cast<uint32_t>(
+            std::distance(queueFamilyProperties.begin(), it));
+
+        if (m_PhysicalDevice.getSurfaceSupportKHR(index, m_Surface)) {
+          graphicsQueueFamilyProperty = it;
+          break;
+        }
+        // Keep first graphics queue as fallback
+        if (graphicsQueueFamilyProperty == queueFamilyProperties.end()) {
+          graphicsQueueFamilyProperty = it;
+        }
       }
     }
-
     if (graphicsQueueFamilyProperty == queueFamilyProperties.end()) {
       throw std::runtime_error("No graphics queue family found!");
     }
-
     auto graphicsIndex = static_cast<uint32_t>(std::distance(
         queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
+
+    // Verify the selected queue supports presentation
+    if (!m_PhysicalDevice.getSurfaceSupportKHR(graphicsIndex, m_Surface)) {
+      throw std::runtime_error(
+          "Graphics queue family does not support presentation!");
+    }
 
     // Create a chain of feature structures
     vk::StructureChain<vk::PhysicalDeviceFeatures2,
@@ -99,22 +113,32 @@ private:
             {.extendedDynamicState = true},
         };
 
+    // Ensure swapchain extension is included
+    std::vector<const char *> deviceExtensions = requiredDeviceExtension;
+    bool hasSwapchainExt = false;
+    for (const auto &ext : deviceExtensions) {
+      if (strcmp(ext, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) {
+        hasSwapchainExt = true;
+        break;
+      }
+    }
+    if (!hasSwapchainExt) {
+      deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+
     float queuePriority = 0.0f;
     vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
         .queueFamilyIndex = graphicsIndex,
         .queueCount = 1,
         .pQueuePriorities = &queuePriority,
     };
-
     vk::DeviceCreateInfo deviceCreateInfo{
         .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &deviceQueueCreateInfo,
-        .enabledExtensionCount =
-            static_cast<uint32_t>(requiredDeviceExtension.size()),
-        .ppEnabledExtensionNames = requiredDeviceExtension.data(),
+        .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+        .ppEnabledExtensionNames = deviceExtensions.data(),
     };
-
     m_device = vk::raii::Device(m_PhysicalDevice, deviceCreateInfo);
     m_GraphicsQueue = vk::raii::Queue(m_device, graphicsIndex, 0);
   }
