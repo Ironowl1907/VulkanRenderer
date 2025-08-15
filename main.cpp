@@ -55,8 +55,17 @@ private:
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
+  }
+  void createSurface() {
+    VkSurfaceKHR _surface;
+    if (glfwCreateWindowSurface(*m_Instance, m_Window, nullptr, &_surface) !=
+        0) {
+      throw std::runtime_error("failed to create window surface!");
+    }
+    m_Surface = vk::raii::SurfaceKHR(m_Instance, _surface);
   }
 
   void createLogicalDevice() {
@@ -299,6 +308,7 @@ private:
   vk::raii::Instance m_Instance = nullptr;
 
   vk::raii::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
+  vk::raii::SurfaceKHR m_Surface = nullptr;
 
   vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
 
