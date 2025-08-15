@@ -56,6 +56,58 @@ private:
     createInstance();
     setupDebugMessenger();
     pickPhysicalDevice();
+    createLogicalDevice();
+  }
+
+  void createLogicalDevice() {
+    std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
+        m_PhysicalDevice.getQueueFamilyProperties();
+
+    auto graphicsQueueFamilyProperty = queueFamilyProperties.end();
+
+    for (auto it = queueFamilyProperties.begin();
+         it != queueFamilyProperties.end(); ++it) {
+      if (it->queueFlags & vk::QueueFlagBits::eGraphics) {
+        graphicsQueueFamilyProperty = it;
+        break;
+      }
+    }
+
+    if (graphicsQueueFamilyProperty == queueFamilyProperties.end()) {
+      throw std::runtime_error("No graphics queue family found!");
+    }
+
+    auto graphicsIndex = static_cast<uint32_t>(std::distance(
+        queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
+
+    // Create a chain of feature structures
+    vk::StructureChain<vk::PhysicalDeviceFeatures2,
+                       vk::PhysicalDeviceVulkan13Features,
+                       vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+        featureChain = {
+            {},
+            {.dynamicRendering = true},
+            {.extendedDynamicState = true},
+        };
+
+    float queuePriority = 0.0f;
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
+        .queueFamilyIndex = graphicsIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
+
+    vk::DeviceCreateInfo deviceCreateInfo{
+        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &deviceQueueCreateInfo,
+        .enabledExtensionCount =
+            static_cast<uint32_t>(requiredDeviceExtension.size()),
+        .ppEnabledExtensionNames = requiredDeviceExtension.data(),
+    };
+
+    m_device = vk::raii::Device(m_PhysicalDevice, deviceCreateInfo);
+    m_GraphicsQueue = vk::raii::Queue(m_device, graphicsIndex, 0);
   }
 
   void pickPhysicalDevice() {
@@ -256,6 +308,9 @@ private:
       vk::KHRSynchronization2ExtensionName,
       vk::KHRCreateRenderpass2ExtensionName,
   };
+
+  vk::raii::Device m_device = nullptr;
+  vk::raii::Queue m_GraphicsQueue = nullptr;
 };
 
 int main() {
