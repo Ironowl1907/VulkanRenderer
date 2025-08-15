@@ -55,6 +55,65 @@ private:
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    pickPhysicalDevice();
+  }
+
+  void pickPhysicalDevice() {
+    auto devices = m_Instance.enumeratePhysicalDevices();
+
+    for (const auto &device : devices) {
+      // Check if the device supports the Vulkan 1.3 API version
+      bool supportsVulkan1_3 =
+          device.getProperties().apiVersion >= VK_API_VERSION_1_3;
+
+      // Check if any of the queue families support graphics operations
+      auto queueFamilies = device.getQueueFamilyProperties();
+      bool supportsGraphics = false;
+      for (const auto &qfp : queueFamilies) {
+        if (qfp.queueFlags & vk::QueueFlagBits::eGraphics) {
+          supportsGraphics = true;
+          break;
+        }
+      }
+
+      // Check if all required device extensions are available
+      auto availableDeviceExtensions =
+          device.enumerateDeviceExtensionProperties();
+      bool supportsAllRequiredExtensions = true;
+
+      for (const auto &requiredExtension : requiredDeviceExtension) {
+        bool extensionFound = false;
+        for (const auto &availableExtension : availableDeviceExtensions) {
+          if (strcmp(availableExtension.extensionName, requiredExtension) ==
+              0) {
+            extensionFound = true;
+            break;
+          }
+        }
+        if (!extensionFound) {
+          supportsAllRequiredExtensions = false;
+          break;
+        }
+      }
+
+      auto features = device.template getFeatures2<
+          vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features,
+          vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+
+      bool supportsRequiredFeatures =
+          features.template get<vk::PhysicalDeviceVulkan13Features>()
+              .dynamicRendering &&
+          features
+              .template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
+              .extendedDynamicState;
+
+      if (supportsVulkan1_3 && supportsGraphics &&
+          supportsAllRequiredExtensions && supportsRequiredFeatures) {
+        m_PhysicalDevice = device;
+        return;
+      }
+    }
+    throw std::runtime_error("failed to find a suitable GPU!");
   }
 
   void setupDebugMessenger() {
@@ -165,6 +224,22 @@ private:
     return vk::False;
   }
 
+  uint32_t findQueueFamilies(VkPhysicalDevice device) {
+    // find the index of the first queue family that supports graphics
+    std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
+        m_PhysicalDevice.getQueueFamilyProperties();
+
+    // get the first index into queueFamilyProperties which supports graphics
+    auto graphicsQueueFamilyProperty =
+        std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
+                     [](vk::QueueFamilyProperties const &qfp) {
+                       return qfp.queueFlags & vk::QueueFlagBits::eGraphics;
+                     });
+
+    return static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(),
+                                               graphicsQueueFamilyProperty));
+  }
+
 private:
   GLFWwindow *m_Window;
 
@@ -172,6 +247,15 @@ private:
   vk::raii::Instance m_Instance = nullptr;
 
   vk::raii::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
+
+  vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
+
+  std::vector<const char *> requiredDeviceExtension = {
+      vk::KHRSwapchainExtensionName,
+      vk::KHRSpirv14ExtensionName,
+      vk::KHRSynchronization2ExtensionName,
+      vk::KHRCreateRenderpass2ExtensionName,
+  };
 };
 
 int main() {
