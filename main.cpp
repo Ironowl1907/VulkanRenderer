@@ -396,10 +396,27 @@ private:
   void mainLoop() {
     while (!glfwWindowShouldClose(m_Window)) {
       glfwPollEvents();
+      break;
     }
   }
 
   void cleanup() {
+    if (m_device != nullptr) {
+      m_device.waitIdle();
+    }
+
+    m_SwapChain.clear();
+    m_GraphicsQueue.clear();
+    m_PresentQueue.clear();
+    m_device.clear();
+    m_Surface.clear();
+    m_DebugMessenger.clear();
+    m_Instance.clear();
+
+    if (m_Window) {
+      glfwDestroyWindow(m_Window);
+      m_Window = nullptr;
+    }
     glfwDestroyWindow(m_Window);
     glfwTerminate();
   }
@@ -432,15 +449,13 @@ private:
 
 private:
   GLFWwindow *m_Window;
-
   vk::raii::Context m_RaiiContext;
   vk::raii::Instance m_Instance = nullptr;
-
   vk::raii::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
   vk::raii::SurfaceKHR m_Surface = nullptr;
-
   vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
-
+  vk::raii::Device m_device = nullptr;
+  vk::raii::Queue m_GraphicsQueue = nullptr;
   vk::raii::Queue m_PresentQueue = nullptr;
 
   std::vector<const char *> requiredDeviceExtension = {
@@ -449,15 +464,10 @@ private:
       vk::KHRSynchronization2ExtensionName,
       vk::KHRCreateRenderpass2ExtensionName,
   };
-
-  vk::raii::Device m_device = nullptr;
-  vk::raii::Queue m_GraphicsQueue = nullptr;
-
-  vk::raii::SwapchainKHR m_SwapChain = nullptr;
-  std::vector<vk::Image> m_SwapChainImages;
-
   vk::Format m_SwapChainImageFormat = vk::Format::eUndefined;
   vk::Extent2D m_SwapChainExtent;
+  std::vector<vk::Image> m_SwapChainImages;
+  vk::raii::SwapchainKHR m_SwapChain = nullptr; // ← Moved to end
 };
 
 int main() {
