@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -60,6 +61,39 @@ private:
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
+    createImageViews();
+    createGraphicsPipeline();
+  }
+
+  void createGraphicsPipeline() {
+    vk::raii::ShaderModule shaderModule =
+        createShaderModule(readFile("shaders/slang.spv"));
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eVertex,
+        .module = shaderModule,
+        .pName = "vertMain"};
+
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eFragment,
+        .module = shaderModule,
+        .pName = "fragMain"};
+
+    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
+                                                        fragShaderStageInfo};
+  }
+
+  void createImageViews() {
+    m_SwapChainImageViews.clear();
+
+    vk::ImageViewCreateInfo imageViewCreateInfo{
+        .viewType = vk::ImageViewType::e2D,
+        .format = m_SwapChainImageFormat,
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
+    for (auto image : m_SwapChainImages) {
+      imageViewCreateInfo.image = image;
+      m_SwapChainImageViews.emplace_back(m_device, imageViewCreateInfo);
+    }
   }
 
   void createSwapChain() {
@@ -404,7 +438,7 @@ private:
     if (m_device != nullptr) {
       m_device.waitIdle();
     }
-
+    m_SwapChainImageViews.clear();
     m_SwapChain.clear();
     m_GraphicsQueue.clear();
     m_PresentQueue.clear();
@@ -447,6 +481,32 @@ private:
                                                graphicsQueueFamilyProperty));
   }
 
+  static std::vector<char> readFile(const std::string &filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+      std::cout << "Couldn't open file: " << filename << '\n';
+      throw std::runtime_error("error opening file!");
+    }
+
+    std::vector<char> buffer(file.tellg());
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+
+    file.close();
+    return buffer;
+  }
+
+  [[nodiscard]] vk::raii::ShaderModule
+  createShaderModule(const std::vector<char> &code) const {
+    vk::ShaderModuleCreateInfo createInfo{
+        .codeSize = code.size() * sizeof(char),
+        .pCode = reinterpret_cast<const uint32_t *>(code.data())};
+    vk::raii::ShaderModule shaderModule{m_device, createInfo};
+
+    return shaderModule;
+  }
+
 private:
   GLFWwindow *m_Window;
   vk::raii::Context m_RaiiContext;
@@ -468,6 +528,7 @@ private:
   vk::Extent2D m_SwapChainExtent;
   std::vector<vk::Image> m_SwapChainImages;
   vk::raii::SwapchainKHR m_SwapChain = nullptr; // ← Moved to end
+  std::vector<vk::raii::ImageView> m_SwapChainImageViews;
 };
 
 int main() {
