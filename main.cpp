@@ -118,9 +118,29 @@ private:
         .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
         .pDynamicStates = dynamicStates.data()};
 
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
+        .setLayoutCount = 0, .pushConstantRangeCount = 0};
 
     m_PipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
+
+    vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &m_SwapChainImageFormat};
+    vk::GraphicsPipelineCreateInfo pipelineInfo{
+        .pNext = &pipelineRenderingCreateInfo,
+        .stageCount = 2,
+        .pStages = shaderStages,
+        .pVertexInputState = &vertexInputInfo,
+        .pInputAssemblyState = &inputAssembly,
+        .pViewportState = &viewportState,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pColorBlendState = &colorBlending,
+        .pDynamicState = &dynamicState,
+        .layout = m_PipelineLayout,
+        .renderPass = nullptr};
+
+    m_GraphicsPipeline = vk::raii::Pipeline(m_device, nullptr, pipelineInfo);
   }
 
   void createImageViews() {
@@ -478,6 +498,7 @@ private:
     if (m_device != nullptr) {
       m_device.waitIdle();
     }
+    m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
     m_SwapChainImageViews.clear();
     m_SwapChain.clear();
@@ -573,6 +594,8 @@ private:
   std::vector<vk::raii::ImageView> m_SwapChainImageViews;
 
   vk::raii::PipelineLayout m_PipelineLayout = nullptr;
+
+  vk::raii::Pipeline m_GraphicsPipeline = nullptr;
 };
 
 int main() {
