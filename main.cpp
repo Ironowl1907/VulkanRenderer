@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -520,6 +521,7 @@ private:
     if (m_Device != nullptr) {
       m_Device.waitIdle();
     }
+    m_CommandBuffer.clear();
     m_CommandPool.clear();
     m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
@@ -561,7 +563,8 @@ private:
         vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
     );
 
-    vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+    vk::ClearValue clearColor =
+        vk::ClearValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
 
     vk::RenderingAttachmentInfo attachmentInfo = {
         .imageView = m_SwapChainImageViews[imageIndex],
@@ -581,12 +584,22 @@ private:
     m_CommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                  m_GraphicsPipeline);
 
-    m_CommandBuffer.setViewport(
-        0,
-        vk::Viewport(0.0f, 0.0f, static_cast<float>(m_SwapChainExtent.width),
-                     static_cast<float>(m_SwapChainExtent.height), 0.0f, 1.0f));
-    m_CommandBuffer.setScissor(
-        0, vk::Rect2D(vk::Offset2D(0, 0), m_SwapChainExtent));
+    vk::Viewport viewport{
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(m_SwapChainExtent.width),
+        .height = static_cast<float>(m_SwapChainExtent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+
+    vk::Rect2D scissor{
+        .offset = {0, 0},
+        .extent = m_SwapChainExtent,
+    };
+
+    m_CommandBuffer.setViewport(0, viewport);
+    m_CommandBuffer.setScissor(0, scissor);
 
     m_CommandBuffer.draw(3, 1, 0, 0);
 
@@ -655,6 +668,10 @@ private:
 
   static std::vector<char> readFile(const std::string &filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    std::cout << "Opening file: " << filename << '\n'
+              << '\t'
+              << "Current Directory: " << std::filesystem::current_path()
+              << '\n';
 
     if (!file.is_open()) {
       std::cout << "Couldn't open file: " << filename << '\n';
