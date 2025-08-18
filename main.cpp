@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -63,6 +64,27 @@ private:
     createSwapChain();
     createImageViews();
     createGraphicsPipeline();
+    createCommandPool();
+    createCommandBuffer();
+  }
+
+  void createCommandBuffer() {
+    vk::CommandBufferAllocateInfo allocInfo{
+        .commandPool = m_CommandPool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1};
+
+    m_CommandBuffer =
+        std::move(vk::raii::CommandBuffers(m_Device, allocInfo).front());
+  }
+
+  void createCommandPool() {
+    vk::CommandPoolCreateInfo poolInfo{
+        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        .queueFamilyIndex = m_GraphicsIndex,
+    };
+
+    m_CommandPool = vk::raii::CommandPool(m_Device, poolInfo);
   }
 
   void createGraphicsPipeline() {
@@ -121,7 +143,7 @@ private:
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
         .setLayoutCount = 0, .pushConstantRangeCount = 0};
 
-    m_PipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
+    m_PipelineLayout = vk::raii::PipelineLayout(m_Device, pipelineLayoutInfo);
 
     vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
         .colorAttachmentCount = 1,
@@ -140,7 +162,7 @@ private:
         .layout = m_PipelineLayout,
         .renderPass = nullptr};
 
-    m_GraphicsPipeline = vk::raii::Pipeline(m_device, nullptr, pipelineInfo);
+    m_GraphicsPipeline = vk::raii::Pipeline(m_Device, nullptr, pipelineInfo);
   }
 
   void createImageViews() {
@@ -152,7 +174,7 @@ private:
         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
     for (auto image : m_SwapChainImages) {
       imageViewCreateInfo.image = image;
-      m_SwapChainImageViews.emplace_back(m_device, imageViewCreateInfo);
+      m_SwapChainImageViews.emplace_back(m_Device, imageViewCreateInfo);
     }
   }
 
@@ -195,7 +217,7 @@ private:
         .clipped = true,
         .oldSwapchain = nullptr,
     };
-    m_SwapChain = vk::raii::SwapchainKHR(m_device, swapChainCreateInfo);
+    m_SwapChain = vk::raii::SwapchainKHR(m_Device, swapChainCreateInfo);
     m_SwapChainImages = m_SwapChain.getImages();
 
     m_SwapChainImageFormat = swapChainSurfaceFormat.format;
@@ -229,43 +251,43 @@ private:
       std::runtime_error("no available queue with graphics support");
     }
 
-    auto graphicsIndex = static_cast<uint32_t>(std::distance(
+    auto m_GraphicIndex = static_cast<uint32_t>(std::distance(
         queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
 
     // determine a queueFamilyIndex that supports present
-    // first check if the graphicsIndex is good enough
-    auto presentIndex =
-        m_PhysicalDevice.getSurfaceSupportKHR(graphicsIndex, *m_Surface)
-            ? graphicsIndex
+    // first check if the m_GraphicIndex is good enough
+    auto m_PresentIndex =
+        m_PhysicalDevice.getSurfaceSupportKHR(m_GraphicIndex, *m_Surface)
+            ? m_GraphicIndex
             : static_cast<uint32_t>(queueFamilyProperties.size());
-    if (presentIndex == queueFamilyProperties.size()) {
-      // the graphicsIndex doesn't support present -> look for another family
+    if (m_PresentIndex == queueFamilyProperties.size()) {
+      // the m_GraphicIndex doesn't support present -> look for another family
       // index that supports both graphics and present
       for (size_t i = 0; i < queueFamilyProperties.size(); i++) {
         if ((queueFamilyProperties[i].queueFlags &
              vk::QueueFlagBits::eGraphics) &&
             m_PhysicalDevice.getSurfaceSupportKHR(static_cast<uint32_t>(i),
                                                   *m_Surface)) {
-          graphicsIndex = static_cast<uint32_t>(i);
-          presentIndex = graphicsIndex;
+          m_GraphicIndex = static_cast<uint32_t>(i);
+          m_PresentIndex = m_GraphicIndex;
           break;
         }
       }
-      if (presentIndex == queueFamilyProperties.size()) {
+      if (m_PresentIndex == queueFamilyProperties.size()) {
         // there's nothing like a single family index that supports both
         // graphics and present -> look for another family index that supports
         // present
         for (size_t i = 0; i < queueFamilyProperties.size(); i++) {
           if (m_PhysicalDevice.getSurfaceSupportKHR(static_cast<uint32_t>(i),
                                                     *m_Surface)) {
-            presentIndex = static_cast<uint32_t>(i);
+            m_PresentIndex = static_cast<uint32_t>(i);
             break;
           }
         }
       }
     }
-    if ((graphicsIndex == queueFamilyProperties.size()) ||
-        (presentIndex == queueFamilyProperties.size())) {
+    if ((m_GraphicsIndex == queueFamilyProperties.size()) ||
+        (m_PresentIndex == queueFamilyProperties.size())) {
       throw std::runtime_error(
           "Could not find a queue for graphics or present -> terminating");
     }
@@ -282,7 +304,7 @@ private:
     // create a Device
     float queuePriority = 0.0f;
     vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
-        .queueFamilyIndex = graphicsIndex,
+        .queueFamilyIndex = m_GraphicsIndex,
         .queueCount = 1,
         .pQueuePriorities = &queuePriority};
 
@@ -298,9 +320,9 @@ private:
     deviceCreateInfo.enabledExtensionCount = requiredDeviceExtension.size();
     deviceCreateInfo.ppEnabledExtensionNames = requiredDeviceExtension.data();
 
-    m_device = vk::raii::Device(m_PhysicalDevice, deviceCreateInfo);
-    m_GraphicsQueue = vk::raii::Queue(m_device, graphicsIndex, 0);
-    m_PresentQueue = vk::raii::Queue(m_device, presentIndex, 0);
+    m_Device = vk::raii::Device(m_PhysicalDevice, deviceCreateInfo);
+    m_GraphicsQueue = vk::raii::Queue(m_Device, m_GraphicsIndex, 0);
+    m_PresentQueue = vk::raii::Queue(m_Device, m_PresentIndex, 0);
   }
 
   vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
@@ -495,16 +517,17 @@ private:
   }
 
   void cleanup() {
-    if (m_device != nullptr) {
-      m_device.waitIdle();
+    if (m_Device != nullptr) {
+      m_Device.waitIdle();
     }
+    m_CommandPool.clear();
     m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
     m_SwapChainImageViews.clear();
     m_SwapChain.clear();
     m_GraphicsQueue.clear();
     m_PresentQueue.clear();
-    m_device.clear();
+    m_Device.clear();
     m_Surface.clear();
     m_DebugMessenger.clear();
     m_Instance.clear();
@@ -525,6 +548,93 @@ private:
               << " msg: " << pCallbackData->pMessage << std::endl;
 
     return vk::False;
+  }
+
+  void recordCommandBuffer(uint32_t imageIndex) {
+    m_CommandBuffer.begin({});
+    transition_image_layout(
+        imageIndex, vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        {}, // srcAccessMask (no need to wait for previous operations)
+        vk::AccessFlagBits2::eColorAttachmentWrite,        // dstAccessMask
+        vk::PipelineStageFlagBits2::eTopOfPipe,            // srcStage
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
+    );
+
+    vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+
+    vk::RenderingAttachmentInfo attachmentInfo = {
+        .imageView = m_SwapChainImageViews[imageIndex],
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = clearColor};
+
+    vk::RenderingInfo renderingInfo = {
+        .renderArea = {.offset = {0, 0}, .extent = m_SwapChainExtent},
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentInfo};
+
+    // Start Rendering
+    m_CommandBuffer.beginRendering(renderingInfo);
+    m_CommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                 m_GraphicsPipeline);
+
+    m_CommandBuffer.setViewport(
+        0,
+        vk::Viewport(0.0f, 0.0f, static_cast<float>(m_SwapChainExtent.width),
+                     static_cast<float>(m_SwapChainExtent.height), 0.0f, 1.0f));
+    m_CommandBuffer.setScissor(
+        0, vk::Rect2D(vk::Offset2D(0, 0), m_SwapChainExtent));
+
+    m_CommandBuffer.draw(3, 1, 0, 0);
+
+    m_CommandBuffer.endRendering();
+
+    transition_image_layout(
+        imageIndex, vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::ePresentSrcKHR,
+        vk::AccessFlagBits2::eColorAttachmentWrite,         // srcAccessMask
+        {},                                                 // dstAccessMask
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
+        vk::PipelineStageFlagBits2::eBottomOfPipe           // dstStage
+    );
+
+    m_CommandBuffer.end();
+  }
+
+  void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout,
+                               vk::ImageLayout newLayout,
+                               vk::AccessFlags2 srcAccessMask,
+                               vk::AccessFlags2 dstAccessMask,
+                               vk::PipelineStageFlags2 srcStageMask,
+                               vk::PipelineStageFlags2 dstStageMask) {
+    vk::ImageMemoryBarrier2 barrier = {
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = m_SwapChainImages[imageIndex],
+        .subresourceRange =
+            {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+    vk::DependencyInfo dependencyInfo = {
+        .dependencyFlags = {},
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier,
+    };
+    m_CommandBuffer.pipelineBarrier2(dependencyInfo);
   }
 
   uint32_t findQueueFamilies(VkPhysicalDevice device) {
@@ -564,7 +674,7 @@ private:
     vk::ShaderModuleCreateInfo createInfo{
         .codeSize = code.size() * sizeof(char),
         .pCode = reinterpret_cast<const uint32_t *>(code.data())};
-    vk::raii::ShaderModule shaderModule{m_device, createInfo};
+    vk::raii::ShaderModule shaderModule{m_Device, createInfo};
 
     return shaderModule;
   }
@@ -576,9 +686,11 @@ private:
   vk::raii::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
   vk::raii::SurfaceKHR m_Surface = nullptr;
   vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
-  vk::raii::Device m_device = nullptr;
+  vk::raii::Device m_Device = nullptr;
   vk::raii::Queue m_GraphicsQueue = nullptr;
   vk::raii::Queue m_PresentQueue = nullptr;
+  uint32_t m_GraphicsIndex = 0;
+  uint32_t m_PresentIndex = 0;
 
   std::vector<const char *> requiredDeviceExtension = {
       vk::KHRSwapchainExtensionName,
@@ -596,6 +708,9 @@ private:
   vk::raii::PipelineLayout m_PipelineLayout = nullptr;
 
   vk::raii::Pipeline m_GraphicsPipeline = nullptr;
+
+  vk::raii::CommandPool m_CommandPool = nullptr;
+  vk::raii::CommandBuffer m_CommandBuffer = nullptr;
 };
 
 int main() {
