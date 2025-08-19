@@ -67,6 +67,16 @@ private:
     createGraphicsPipeline();
     createCommandPool();
     createCommandBuffer();
+    createSyncObjects();
+  }
+
+  void createSyncObjects() {
+    m_PresentCompleteSemaphore =
+        vk::raii::Semaphore(m_Device, vk::SemaphoreCreateInfo());
+    m_RenderFinishedSemaphore =
+        vk::raii::Semaphore(m_Device, vk::SemaphoreCreateInfo());
+    m_DrawFence = vk::raii::Fence(
+        m_Device, {.flags = vk::FenceCreateFlagBits::eSignaled});
   }
 
   void createCommandBuffer() {
@@ -513,8 +523,45 @@ private:
   void mainLoop() {
     while (!glfwWindowShouldClose(m_Window)) {
       glfwPollEvents();
-      break;
+      drawFrame();
     }
+    m_Device.waitIdle();
+  }
+
+  void drawFrame() {
+    auto [result, imageIndex] = m_SwapChain.acquireNextImage(
+        UINT64_MAX, *m_PresentCompleteSemaphore, nullptr);
+
+    recordCommandBuffer(imageIndex);
+    m_Device.resetFences(*m_DrawFence);
+
+    vk::PipelineStageFlags waitDestinationStageMask(
+        vk::PipelineStageFlagBits::eColorAttachmentOutput);
+
+    const vk::SubmitInfo submitInfo{
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &*m_PresentCompleteSemaphore,
+        .pWaitDstStageMask = &waitDestinationStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &*m_CommandBuffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &*m_RenderFinishedSemaphore};
+
+    m_GraphicsQueue.submit(submitInfo, *m_DrawFence);
+
+    while (vk::Result::eTimeout ==
+           m_Device.waitForFences(*m_DrawFence, vk::True, UINT64_MAX))
+      ;
+
+    const vk::PresentInfoKHR presentInfoKHR{
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &*m_RenderFinishedSemaphore,
+        .swapchainCount = 1,
+        .pSwapchains = &*m_SwapChain,
+        .pImageIndices = &imageIndex,
+    };
+
+    result = m_PresentQueue.presentKHR(presentInfoKHR);
   }
 
   void cleanup() {
@@ -728,6 +775,11 @@ private:
 
   vk::raii::CommandPool m_CommandPool = nullptr;
   vk::raii::CommandBuffer m_CommandBuffer = nullptr;
+
+  // Syncronization primitives
+  vk::raii::Semaphore m_PresentCompleteSemaphore = nullptr;
+  vk::raii::Semaphore m_RenderFinishedSemaphore = nullptr;
+  vk::raii::Fence m_DrawFence = nullptr;
 };
 
 int main() {
