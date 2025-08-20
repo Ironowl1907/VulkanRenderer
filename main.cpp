@@ -320,6 +320,7 @@ private:
     vulkan13Features.dynamicRendering = vk::True;
     extendedDynamicStateFeatures.extendedDynamicState = vk::True;
     vulkan13Features.pNext = &extendedDynamicStateFeatures;
+    vulkan13Features.synchronization2 = vk::True;
     features.pNext = &vulkan13Features;
     // create a Device
     float queuePriority = 0.0f;
@@ -386,12 +387,10 @@ private:
 
   void pickPhysicalDevice() {
     auto devices = m_Instance.enumeratePhysicalDevices();
-
     for (const auto &device : devices) {
       // Check if the device supports the Vulkan 1.3 API version
       bool supportsVulkan1_3 =
           device.getProperties().apiVersion >= VK_API_VERSION_1_3;
-
       // Check if any of the queue families support graphics operations
       auto queueFamilies = device.getQueueFamilyProperties();
       bool supportsGraphics = false;
@@ -401,12 +400,10 @@ private:
           break;
         }
       }
-
       // Check if all required device extensions are available
       auto availableDeviceExtensions =
           device.enumerateDeviceExtensionProperties();
       bool supportsAllRequiredExtensions = true;
-
       for (const auto &requiredExtension : requiredDeviceExtension) {
         bool extensionFound = false;
         for (const auto &availableExtension : availableDeviceExtensions) {
@@ -421,14 +418,15 @@ private:
           break;
         }
       }
-
       auto features = device.template getFeatures2<
           vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features,
           vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
 
+      auto vulkan13Features =
+          features.template get<vk::PhysicalDeviceVulkan13Features>();
       bool supportsRequiredFeatures =
-          features.template get<vk::PhysicalDeviceVulkan13Features>()
-              .dynamicRendering &&
+          vulkan13Features.dynamicRendering &&
+          vulkan13Features.synchronization2 &&
           features
               .template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
               .extendedDynamicState;
