@@ -541,7 +541,7 @@ private:
                                   UINT64_MAX))
       ;
     auto [result, imageIndex] = m_SwapChain.acquireNextImage(
-        UINT64_MAX, *m_PresentCompleteSemaphores[semaphoreIndex], nullptr);
+        UINT64_MAX, *m_PresentCompleteSemaphores[m_CurrentFrame], nullptr);
 
     m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
     m_CommandBuffers[m_CurrentFrame].reset();
@@ -556,13 +556,13 @@ private:
         .commandBufferCount = 1,
         .pCommandBuffers = &*m_CommandBuffers[m_CurrentFrame],
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &*m_RenderFinishedSemaphores[imageIndex]};
+        .pSignalSemaphores = &*m_RenderFinishedSemaphores[m_CurrentFrame]};
 
     m_GraphicsQueue.submit(submitInfo, *m_InFlightFences[m_CurrentFrame]);
 
     const vk::PresentInfoKHR presentInfoKHR{
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &*m_RenderFinishedSemaphores[imageIndex],
+        .pWaitSemaphores = &*m_RenderFinishedSemaphores[m_CurrentFrame],
         .swapchainCount = 1,
         .pSwapchains = &*m_SwapChain,
         .pImageIndices = &imageIndex};
