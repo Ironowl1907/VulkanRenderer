@@ -72,9 +72,9 @@ private:
   }
 
   void createSyncObjects() {
-    m_ImageAvailableSemaphores.reserve(m_SwapChainImages.size());
-    m_RenderFinishedSemaphores.reserve(m_SwapChainImages.size());
-    m_InFlightFences.reserve(m_SwapChainImages.size());
+    m_ImageAvailableSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
+    m_RenderFinishedSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
+    m_InFlightFences.reserve(MAX_FRAMES_IN_FLIGHT);
 
     for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
       m_ImageAvailableSemaphores.emplace_back(m_Device.createSemaphore({}));
@@ -615,6 +615,7 @@ private:
       a.clear();
     for (auto &a : m_CommandBuffers)
       a.clear();
+
     m_CommandPool.clear();
     m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
