@@ -72,16 +72,17 @@ private:
   }
 
   void createSyncObjects() {
-    m_ImageAvailableSemaphores.resize(m_SwapChainImages.size());
-    m_RenderFinishedSemaphores.resize(m_SwapChainImages.size());
+    m_ImageAvailableSemaphores.reserve(m_SwapChainImages.size());
+    m_RenderFinishedSemaphores.reserve(m_SwapChainImages.size());
     m_InFlightFences.reserve(m_SwapChainImages.size());
 
     for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
-      m_ImageAvailableSemaphores[i] = m_Device.createSemaphore({});
-      m_RenderFinishedSemaphores[i] = m_Device.createSemaphore({});
+      m_ImageAvailableSemaphores.emplace_back(m_Device.createSemaphore({}));
+      m_RenderFinishedSemaphores.emplace_back(m_Device.createSemaphore({}));
+
       vk::FenceCreateInfo fenceInfo{};
       fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
-      m_InFlightFences[i] = m_Device.createFence(fenceInfo);
+      m_InFlightFences.emplace_back(m_Device.createFence(fenceInfo));
     }
   }
 
