@@ -534,53 +534,56 @@ private:
   }
 
   void drawFrame() {
-    // Wait for the current frame's fence
     while (vk::Result::eTimeout ==
            m_Device.waitForFences(*m_InFlightFences[m_CurrentFrame], vk::True,
                                   UINT64_MAX))
       ;
 
-    // Acquire next image - use current frame's semaphore
     auto [result, imageIndex] = m_SwapChain.acquireNextImage(
-        UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], nullptr);
+        UINT64_MAX,
+        m_ImageAvailableSemaphores[m_CurrentFrame], // Use frame-based semaphore
+                                                    // for acquire
+        nullptr);
 
-    // Reset fence and command buffer
+    if (result == vk::Result::eErrorOutOfDateKHR) {
+      // Handle swapchain recreation here
+      return;
+    }
+
     m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
-    m_CommandBuffers[m_CurrentFrame].reset();
 
-    // Record command buffer
+    m_CommandBuffers[m_CurrentFrame].reset();
     recordCommandBuffer(imageIndex);
 
-    // Submit command buffer
     vk::PipelineStageFlags waitDestinationStageMask(
         vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
     const vk::SubmitInfo submitInfo{
         .waitSemaphoreCount = 1,
         .pWaitSemaphores =
-            &*m_ImageAvailableSemaphores[m_CurrentFrame], // Use current frame
+            &*m_ImageAvailableSemaphores[m_CurrentFrame], // Wait for acquire
         .pWaitDstStageMask = &waitDestinationStageMask,
         .commandBufferCount = 1,
         .pCommandBuffers = &*m_CommandBuffers[m_CurrentFrame],
         .signalSemaphoreCount = 1,
         .pSignalSemaphores =
-            &*m_RenderFinishedSemaphores[m_CurrentFrame] // Use current frame,
-                                                         // not imageIndex
+            &*m_RenderFinishedSemaphores[imageIndex], // Signal based on IMAGE
+                                                      // INDEX
     };
 
-    // Use m_GraphicsQueue instead of undefined 'queue'
     m_GraphicsQueue.submit(submitInfo, *m_InFlightFences[m_CurrentFrame]);
 
-    // Present the image
+    // Present the rendered image
     const vk::PresentInfoKHR presentInfoKHR{
         .waitSemaphoreCount = 1,
         .pWaitSemaphores =
-            &*m_RenderFinishedSemaphores[m_CurrentFrame], // Use current frame
+            &*m_RenderFinishedSemaphores[imageIndex], // Wait for render of THIS
+                                                      // image
         .swapchainCount = 1,
         .pSwapchains = &*m_SwapChain,
-        .pImageIndices = &imageIndex};
+        .pImageIndices = &imageIndex,
+    };
 
-    // Use m_PresentQueue instead of undefined 'queue'
     result = m_PresentQueue.presentKHR(presentInfoKHR);
 
     switch (result) {
@@ -590,11 +593,13 @@ private:
       std::cout
           << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR!\n";
       break;
+    case vk::Result::eErrorOutOfDateKHR:
+      // Handle swapchain recreation
+      break;
     default:
       break;
     }
 
-    // Advance to next frame
     m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
 
@@ -816,7 +821,7 @@ private:
   std::vector<vk::raii::Semaphore> m_RenderFinishedSemaphores;
   std::vector<vk::raii::Fence> m_InFlightFences;
   uint32_t m_CurrentFrame = 0;
-  uint32_t semaphoreIndex = 0;
+  uint32_t m_SemaphoreIndex = 0;
 };
 
 int main() {
