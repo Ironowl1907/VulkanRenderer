@@ -607,6 +607,12 @@ private:
     if (m_Device != nullptr) {
       m_Device.waitIdle();
     }
+    for (auto &a : m_ImageAvailableSemaphores)
+      a.clear();
+    for (auto &a : m_RenderFinishedSemaphores)
+      a.clear();
+    for (auto &a : m_InFlightFences)
+      a.clear();
     for (auto &a : m_CommandBuffers)
       a.clear();
     m_CommandPool.clear();
