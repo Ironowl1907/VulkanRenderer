@@ -72,19 +72,16 @@ private:
   }
 
   void createSyncObjects() {
-    m_PresentCompleteSemaphores.clear();
-    m_RenderFinishedSemaphores.clear();
-    m_InFlightFences.clear();
+    m_ImageAvailableSemaphores.resize(m_SwapChainImages.size());
+    m_RenderFinishedSemaphores.resize(m_SwapChainImages.size());
+    m_InFlightFences.reserve(m_SwapChainImages.size());
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-      m_PresentCompleteSemaphores.emplace_back(m_Device,
-                                               vk::SemaphoreCreateInfo());
-      m_RenderFinishedSemaphores.emplace_back(m_Device,
-                                              vk::SemaphoreCreateInfo());
-      vk::FenceCreateInfo createInfo{
-          .flags = vk::FenceCreateFlagBits::eSignaled,
-      };
-      m_InFlightFences.emplace_back(m_Device, createInfo);
+    for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
+      m_ImageAvailableSemaphores[i] = m_Device.createSemaphore({});
+      m_RenderFinishedSemaphores[i] = m_Device.createSemaphore({});
+      vk::FenceCreateInfo fenceInfo{};
+      fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+      m_InFlightFences[i] = m_Device.createFence(fenceInfo);
     }
   }
 
@@ -271,14 +268,14 @@ private:
       std::runtime_error("no available queue with graphics support");
     }
 
-    auto m_GraphicIndex = static_cast<uint32_t>(std::distance(
+    m_GraphicsIndex = static_cast<uint32_t>(std::distance(
         queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
 
     // determine a queueFamilyIndex that supports present
     // first check if the m_GraphicIndex is good enough
-    auto m_PresentIndex =
-        m_PhysicalDevice.getSurfaceSupportKHR(m_GraphicIndex, *m_Surface)
-            ? m_GraphicIndex
+    m_PresentIndex =
+        m_PhysicalDevice.getSurfaceSupportKHR(m_GraphicsIndex, *m_Surface)
+            ? m_GraphicsIndex
             : static_cast<uint32_t>(queueFamilyProperties.size());
     if (m_PresentIndex == queueFamilyProperties.size()) {
       // the m_GraphicIndex doesn't support present -> look for another family
@@ -288,8 +285,8 @@ private:
              vk::QueueFlagBits::eGraphics) &&
             m_PhysicalDevice.getSurfaceSupportKHR(static_cast<uint32_t>(i),
                                                   *m_Surface)) {
-          m_GraphicIndex = static_cast<uint32_t>(i);
-          m_PresentIndex = m_GraphicIndex;
+          m_GraphicsIndex = static_cast<uint32_t>(i);
+          m_PresentIndex = m_GraphicsIndex;
           break;
         }
       }
@@ -536,48 +533,67 @@ private:
   }
 
   void drawFrame() {
+    // Wait for the current frame's fence
     while (vk::Result::eTimeout ==
            m_Device.waitForFences(*m_InFlightFences[m_CurrentFrame], vk::True,
                                   UINT64_MAX))
       ;
-    auto [result, imageIndex] = m_SwapChain.acquireNextImage(
-        UINT64_MAX, *m_PresentCompleteSemaphores[m_CurrentFrame], nullptr);
 
+    // Acquire next image - use current frame's semaphore
+    auto [result, imageIndex] = m_SwapChain.acquireNextImage(
+        UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], nullptr);
+
+    // Reset fence and command buffer
     m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
     m_CommandBuffers[m_CurrentFrame].reset();
+
+    // Record command buffer
     recordCommandBuffer(imageIndex);
 
+    // Submit command buffer
     vk::PipelineStageFlags waitDestinationStageMask(
         vk::PipelineStageFlagBits::eColorAttachmentOutput);
+
     const vk::SubmitInfo submitInfo{
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &*m_PresentCompleteSemaphores[semaphoreIndex],
+        .pWaitSemaphores =
+            &*m_ImageAvailableSemaphores[m_CurrentFrame], // Use current frame
         .pWaitDstStageMask = &waitDestinationStageMask,
         .commandBufferCount = 1,
         .pCommandBuffers = &*m_CommandBuffers[m_CurrentFrame],
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &*m_RenderFinishedSemaphores[m_CurrentFrame]};
+        .pSignalSemaphores =
+            &*m_RenderFinishedSemaphores[m_CurrentFrame] // Use current frame,
+                                                         // not imageIndex
+    };
 
+    // Use m_GraphicsQueue instead of undefined 'queue'
     m_GraphicsQueue.submit(submitInfo, *m_InFlightFences[m_CurrentFrame]);
 
+    // Present the image
     const vk::PresentInfoKHR presentInfoKHR{
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &*m_RenderFinishedSemaphores[m_CurrentFrame],
+        .pWaitSemaphores =
+            &*m_RenderFinishedSemaphores[m_CurrentFrame], // Use current frame
         .swapchainCount = 1,
         .pSwapchains = &*m_SwapChain,
         .pImageIndices = &imageIndex};
-    result = m_GraphicsQueue.presentKHR(presentInfoKHR);
+
+    // Use m_PresentQueue instead of undefined 'queue'
+    result = m_PresentQueue.presentKHR(presentInfoKHR);
+
     switch (result) {
     case vk::Result::eSuccess:
       break;
     case vk::Result::eSuboptimalKHR:
       std::cout
-          << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR !\n";
+          << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR!\n";
       break;
     default:
-      break; // an unexpected result is returned!
+      break;
     }
-    semaphoreIndex = (semaphoreIndex + 1) % m_PresentCompleteSemaphores.size();
+
+    // Advance to next frame
     m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
 
@@ -795,7 +811,7 @@ private:
   std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
 
   // Syncronization primitives
-  std::vector<vk::raii::Semaphore> m_PresentCompleteSemaphores;
+  std::vector<vk::raii::Semaphore> m_ImageAvailableSemaphores;
   std::vector<vk::raii::Semaphore> m_RenderFinishedSemaphores;
   std::vector<vk::raii::Fence> m_InFlightFences;
   uint32_t m_CurrentFrame = 0;
