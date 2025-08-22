@@ -53,9 +53,11 @@ private:
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+    glfwSetWindowUserPointer(m_Window, this);
+    glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallback);
   }
   void initVulkan() {
     createInstance();
@@ -545,9 +547,16 @@ private:
                                                     // for acquire
         nullptr);
 
-    if (result == vk::Result::eErrorOutOfDateKHR) {
-      // Handle swapchain recreation here
+    if (result == vk::Result::eErrorOutOfDateKHR ||
+        result == vk::Result::eSuboptimalKHR) {
+      m_FramebufferResized = false;
+      recreateSwapChain();
       return;
+    }
+
+    if (result != vk::Result::eSuccess &&
+        result != vk::Result::eSuboptimalKHR) {
+      throw std::runtime_error("failed to acquire swap chain image!");
     }
 
     m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
@@ -589,15 +598,18 @@ private:
     switch (result) {
     case vk::Result::eSuccess:
       break;
-    case vk::Result::eSuboptimalKHR:
-      std::cout
-          << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR!\n";
-      break;
+
     case vk::Result::eErrorOutOfDateKHR:
-      // Handle swapchain recreation
+    case vk::Result::eSuboptimalKHR:
+      recreateSwapChain();
       break;
     default:
       break;
+    }
+
+    if (m_FramebufferResized) {
+      m_FramebufferResized = false;
+      recreateSwapChain();
     }
 
     m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -619,8 +631,7 @@ private:
     m_CommandPool.clear();
     m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
-    m_SwapChainImageViews.clear();
-    m_SwapChain.clear();
+    cleanupSwapChain();
     m_GraphicsQueue.clear();
     m_PresentQueue.clear();
     m_Device.clear();
@@ -780,6 +791,29 @@ private:
     return buffer;
   }
 
+  void cleanupSwapChain() {
+    m_SwapChainImageViews.clear();
+    m_SwapChain.clear();
+
+    m_SwapChain = nullptr;
+  }
+
+  void recreateSwapChain() {
+    // std::cout << "Recreating the swapchain" << std::endl;
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(m_Window, &width, &height);
+    while (width == 0 || height == 0) {
+      glfwGetFramebufferSize(m_Window, &width, &height);
+      glfwWaitEvents();
+    }
+
+    m_Device.waitIdle();
+
+    cleanupSwapChain();
+    createSwapChain();
+    createImageViews();
+  }
+
   [[nodiscard]] vk::raii::ShaderModule
   createShaderModule(const std::vector<char> &code) const {
     vk::ShaderModuleCreateInfo createInfo{
@@ -788,6 +822,13 @@ private:
     vk::raii::ShaderModule shaderModule{m_Device, createInfo};
 
     return shaderModule;
+  }
+
+  static void framebufferResizeCallback(GLFWwindow *window, int width,
+                                        int height) {
+    auto app = reinterpret_cast<HelloTriangleApplication *>(
+        glfwGetWindowUserPointer(window));
+    app->m_FramebufferResized = true;
   }
 
 private:
@@ -829,6 +870,8 @@ private:
   std::vector<vk::raii::Fence> m_InFlightFences;
   uint32_t m_CurrentFrame = 0;
   uint32_t m_SemaphoreIndex = 0;
+
+  bool m_FramebufferResized = false;
 };
 
 int main() {
