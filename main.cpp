@@ -105,36 +105,84 @@ private:
     createImageViews();
     createGraphicsPipeline();
     createCommandPool();
-    createVertexBuffers();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
   }
 
-  void createVertexBuffers() {
-    vk::BufferCreateInfo bufferInfo{};
-    bufferInfo.flags = {};
-    bufferInfo.size = sizeof(vertices[0]) * vertices.size();
-    bufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
-    bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+  void createVertexBuffer() {
+    vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    vk::BufferCreateInfo stagingInfo{
+        .size = bufferSize,
+        .usage = vk::BufferUsageFlagBits::eTransferSrc,
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
+    vk::raii::Buffer stagingBuffer(m_Device, stagingInfo);
+    vk::MemoryRequirements memRequirementsStaging =
+        stagingBuffer.getMemoryRequirements();
+    vk::MemoryAllocateInfo memoryAllocateInfoStaging{
+        .allocationSize = memRequirementsStaging.size,
+        .memoryTypeIndex =
+            findMemoryType(memRequirementsStaging.memoryTypeBits,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent),
+    };
+    vk::raii::DeviceMemory stagingBufferMemory(m_Device,
+                                               memoryAllocateInfoStaging);
+
+    stagingBuffer.bindMemory(stagingBufferMemory, 0);
+    void *dataStaging = stagingBufferMemory.mapMemory(0, stagingInfo.size);
+    memcpy(dataStaging, vertices.data(), stagingInfo.size);
+    stagingBufferMemory.unmapMemory();
+
+    vk::BufferCreateInfo bufferInfo{
+        .size = bufferSize,
+        .usage = vk::BufferUsageFlagBits::eVertexBuffer |
+                 vk::BufferUsageFlagBits::eTransferDst,
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
 
     m_VertexBuffer = vk::raii::Buffer(m_Device, bufferInfo);
 
     vk::MemoryRequirements memRequirements =
         m_VertexBuffer.getMemoryRequirements();
-
-    vk::MemoryAllocateInfo memoryAllocateInfo{};
-    memoryAllocateInfo.allocationSize = memRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex =
-        findMemoryType(memRequirements.memoryTypeBits,
-                       vk::MemoryPropertyFlagBits::eHostVisible |
-                           vk::MemoryPropertyFlagBits::eHostCoherent);
-
+    vk::MemoryAllocateInfo memoryAllocateInfo{
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex =
+            findMemoryType(memRequirements.memoryTypeBits,
+                           vk::MemoryPropertyFlagBits::eDeviceLocal)};
     m_VertexBufferMemory = vk::raii::DeviceMemory(m_Device, memoryAllocateInfo);
+
     m_VertexBuffer.bindMemory(*m_VertexBufferMemory, 0);
 
-    void *data = m_VertexBufferMemory.mapMemory(0, bufferInfo.size);
-    memcpy(data, vertices.data(), bufferInfo.size);
-    m_VertexBufferMemory.unmapMemory();
+    copyBuffer(stagingBuffer, m_VertexBuffer, stagingInfo.size);
+  }
+
+  void copyBuffer(vk::raii::Buffer &srcBuffer, vk::raii::Buffer &dstBuffer,
+                  vk::DeviceSize size) {
+
+    vk::CommandBufferAllocateInfo allocInfo{
+        .commandPool = m_CommandPool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    };
+
+    vk::raii::CommandBuffer commandCopyBuffer =
+        std::move(m_Device.allocateCommandBuffers(allocInfo).front());
+
+    commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer,
+                                 vk::BufferCopy{0, 0, size});
+
+    commandCopyBuffer.end();
+
+    m_GraphicsQueue.submit(
+        vk::SubmitInfo{.commandBufferCount = 1,
+                       .pCommandBuffers = &*commandCopyBuffer},
+        nullptr);
+    m_GraphicsQueue.waitIdle();
   }
 
   void createSyncObjects() {
@@ -923,6 +971,30 @@ private:
     }
 
     throw std::runtime_error("failed to find suitable memory type!");
+  }
+
+  void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
+                    vk::MemoryPropertyFlags properties,
+                    vk::raii::Buffer &buffer,
+                    vk::raii::DeviceMemory &bufferMemory) {
+    vk::BufferCreateInfo bufferInfo{
+        .size = size,
+        .usage = usage,
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
+    buffer = vk::raii::Buffer(m_Device, bufferInfo);
+
+    vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
+
+    vk::MemoryAllocateInfo allocInfo{
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex =
+            findMemoryType(memRequirements.memoryTypeBits, properties),
+    };
+
+    bufferMemory = vk::raii::DeviceMemory(m_Device, allocInfo);
+
+    buffer.bindMemory(*bufferMemory, 0);
   }
 
 private:
