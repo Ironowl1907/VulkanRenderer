@@ -7,6 +7,9 @@
 #include <limits>
 #include <stdexcept>
 
+#include <glm/glm.hpp>
+#include <vulkan/vulkan_core.h>
+
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
 
@@ -24,6 +27,39 @@ constexpr bool enableValidationLayers = false;
 #else
 constexpr bool enableValidationLayers = true;
 #endif
+
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
+
+  static vk::VertexInputBindingDescription getBindingDescription() {
+    return {0, sizeof(Vertex), vk::VertexInputRate::eVertex};
+  }
+
+  static std::array<vk::VertexInputAttributeDescription, 2>
+  getAttributeDescriptions() {
+    return {
+        vk::VertexInputAttributeDescription{
+            .location = 0,
+            .binding = 0,
+            .format = vk::Format::eR32G32Sfloat,
+            .offset = offsetof(Vertex, pos),
+        },
+        vk::VertexInputAttributeDescription{
+            .location = 1,
+            .binding = 0,
+            .format = vk::Format::eR32G32B32Sfloat,
+            .offset = offsetof(Vertex, color),
+        },
+    };
+  }
+};
+
+const std::vector<Vertex> vertices = {
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+};
 
 std::vector<const char *> getRequiredExtensions() {
   uint32_t glfwExtensionCount = 0;
@@ -69,8 +105,36 @@ private:
     createImageViews();
     createGraphicsPipeline();
     createCommandPool();
+    createVertexBuffers();
     createCommandBuffers();
     createSyncObjects();
+  }
+
+  void createVertexBuffers() {
+    vk::BufferCreateInfo bufferInfo{};
+    bufferInfo.flags = {};
+    bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+    bufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
+    bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+
+    m_VertexBuffer = vk::raii::Buffer(m_Device, bufferInfo);
+
+    vk::MemoryRequirements memRequirements =
+        m_VertexBuffer.getMemoryRequirements();
+
+    vk::MemoryAllocateInfo memoryAllocateInfo{};
+    memoryAllocateInfo.allocationSize = memRequirements.size;
+    memoryAllocateInfo.memoryTypeIndex =
+        findMemoryType(memRequirements.memoryTypeBits,
+                       vk::MemoryPropertyFlagBits::eHostVisible |
+                           vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    m_VertexBufferMemory = vk::raii::DeviceMemory(m_Device, memoryAllocateInfo);
+    m_VertexBuffer.bindMemory(*m_VertexBufferMemory, 0);
+
+    void *data = m_VertexBufferMemory.mapMemory(0, bufferInfo.size);
+    memcpy(data, vertices.data(), bufferInfo.size);
+    m_VertexBufferMemory.unmapMemory();
   }
 
   void createSyncObjects() {
@@ -123,6 +187,14 @@ private:
                                                         fragShaderStageInfo};
 
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+
+    vertexInputInfo.vertexAttributeDescriptionCount = 1;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
         .topology = vk::PrimitiveTopology::eTriangleList};
     vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1,
@@ -543,8 +615,8 @@ private:
 
     auto [result, imageIndex] = m_SwapChain.acquireNextImage(
         UINT64_MAX,
-        m_ImageAvailableSemaphores[m_CurrentFrame], // Use frame-based semaphore
-                                                    // for acquire
+        m_ImageAvailableSemaphores[m_CurrentFrame], // Use frame-based
+                                                    // semaphore for acquire
         nullptr);
 
     if (result == vk::Result::eErrorOutOfDateKHR ||
@@ -586,8 +658,8 @@ private:
     const vk::PresentInfoKHR presentInfoKHR{
         .waitSemaphoreCount = 1,
         .pWaitSemaphores =
-            &*m_RenderFinishedSemaphores[imageIndex], // Wait for render of THIS
-                                                      // image
+            &*m_RenderFinishedSemaphores[imageIndex], // Wait for render of
+                                                      // THIS image
         .swapchainCount = 1,
         .pSwapchains = &*m_SwapChain,
         .pImageIndices = &imageIndex,
@@ -619,6 +691,9 @@ private:
     if (m_Device != nullptr) {
       m_Device.waitIdle();
     }
+
+    m_VertexBufferMemory.clear();
+    m_VertexBuffer.clear();
     for (auto &a : m_ImageAvailableSemaphores)
       a.clear();
     for (auto &a : m_RenderFinishedSemaphores)
@@ -686,8 +761,6 @@ private:
 
     // Start Rendering
     m_CommandBuffers[m_CurrentFrame].beginRendering(renderingInfo);
-    m_CommandBuffers[m_CurrentFrame].bindPipeline(
-        vk::PipelineBindPoint::eGraphics, m_GraphicsPipeline);
 
     vk::Viewport viewport{
         .x = 0.0f,
@@ -705,6 +778,11 @@ private:
 
     m_CommandBuffers[m_CurrentFrame].setViewport(0, viewport);
     m_CommandBuffers[m_CurrentFrame].setScissor(0, scissor);
+
+    m_CommandBuffers[m_CurrentFrame].bindPipeline(
+        vk::PipelineBindPoint::eGraphics, *m_GraphicsPipeline);
+
+    m_CommandBuffers[m_CurrentFrame].bindVertexBuffers(0, *m_VertexBuffer, {0});
 
     m_CommandBuffers[m_CurrentFrame].draw(3, 1, 0, 0);
 
@@ -831,6 +909,22 @@ private:
     app->m_FramebufferResized = true;
   }
 
+  uint32_t findMemoryType(uint32_t typeFilter,
+                          vk::MemoryPropertyFlags properties) {
+    vk::PhysicalDeviceMemoryProperties memProperties =
+        m_PhysicalDevice.getMemoryProperties();
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+      if ((typeFilter & (1 << i)) &&
+          (memProperties.memoryTypes[i].propertyFlags & properties) ==
+              properties) {
+        return i;
+      }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+  }
+
 private:
   GLFWwindow *m_Window;
   vk::raii::Context m_RaiiContext;
@@ -872,6 +966,10 @@ private:
   uint32_t m_SemaphoreIndex = 0;
 
   bool m_FramebufferResized = false;
+
+  vk::raii::Buffer m_VertexBuffer = nullptr;
+
+  vk::raii::DeviceMemory m_VertexBufferMemory = nullptr;
 };
 
 int main() {
