@@ -1,6 +1,7 @@
 #include "Instance.h"
 
 #include <iostream>
+#include <vulkan/vulkan_raii.hpp>
 // #include <vulkan/vulkan_core.h>
 
 namespace Renderer {
@@ -118,7 +119,7 @@ void Instance::Create(const char *appName) {
       static_cast<uint32_t>(glfwExtensions.size()),
   createInfo.ppEnabledExtensionNames = glfwExtensions.data(),
 
-  m_Handler = vk::createInstance(createInfo);
+  m_Handler = vk::raii::Instance(m_RaiiContext, createInfo);
 }
 Instance::~Instance() {}
 

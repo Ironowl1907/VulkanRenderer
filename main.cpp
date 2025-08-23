@@ -8,13 +8,14 @@
 #include <stdexcept>
 
 #include <glm/glm.hpp>
-#include <vulkan/vulkan_core.h>
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+
+#include "src/Renderer/Instance/Instance.h"
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
@@ -100,8 +101,7 @@ private:
     glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallback);
   }
   void initVulkan() {
-    createInstance();
-    setupDebugMessenger();
+    m_Instance.Create("Vulkan App");
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
@@ -394,11 +394,11 @@ private:
 
   void createSurface() {
     VkSurfaceKHR _surface;
-    if (glfwCreateWindowSurface(*m_Instance, m_Window, nullptr, &_surface) !=
-        0) {
+    if (glfwCreateWindowSurface(m_Instance.Get(), m_Window, nullptr,
+                                &_surface) != 0) {
       throw std::runtime_error("failed to create window surface!");
     }
-    m_Surface = vk::raii::SurfaceKHR(m_Instance, _surface);
+    m_Surface = vk::raii::SurfaceKHR(m_Instance.GetRaii(), _surface);
   }
 
   void createLogicalDevice() {
@@ -534,7 +534,7 @@ private:
   }
 
   void pickPhysicalDevice() {
-    auto devices = m_Instance.enumeratePhysicalDevices();
+    auto devices = m_Instance.GetRaii().enumeratePhysicalDevices();
     for (const auto &device : devices) {
       // Check if the device supports the Vulkan 1.3 API version
       bool supportsVulkan1_3 =
@@ -586,93 +586,6 @@ private:
       }
     }
     throw std::runtime_error("failed to find a suitable GPU!");
-  }
-
-  void setupDebugMessenger() {
-    if (!enableValidationLayers)
-      return;
-    vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-        vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
-    vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
-        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
-    vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{
-        .messageSeverity = severityFlags,
-        .messageType = messageTypeFlags,
-        .pfnUserCallback = &debugCallback,
-    };
-    m_DebugMessenger = m_Instance.createDebugUtilsMessengerEXT(
-        debugUtilsMessengerCreateInfoEXT);
-  }
-
-  void createInstance() {
-    constexpr vk::ApplicationInfo appInfo{
-        .pApplicationName = "Hello Triangle",
-        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-        .pEngineName = "No Engine",
-        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-        .apiVersion = vk::ApiVersion14,
-    };
-
-    std::vector<const char *> requiredLayers;
-    if (enableValidationLayers) {
-      requiredLayers.assign(validationLayers.begin(), validationLayers.end());
-    }
-
-    // Check if the required layers are supported by the Vulkan implementation
-    auto layerProperties = m_RaiiContext.enumerateInstanceLayerProperties();
-    for (const char *requiredLayer : requiredLayers) {
-      bool layerFound = false;
-      for (const auto &layerProperty : layerProperties) {
-        if (strcmp(layerProperty.layerName, requiredLayer) == 0) {
-          layerFound = true;
-          break;
-        }
-      }
-      if (!layerFound) {
-        throw std::runtime_error(
-            "One or more required layers are not supported!");
-      }
-    }
-    uint32_t glfwExtensionCount = 0;
-    auto glfwExtensions = getRequiredExtensions();
-
-    // Check if the required GLFW extensions are supported by the Vulkan
-    // implementation.
-    auto extensionProperties =
-        m_RaiiContext.enumerateInstanceExtensionProperties();
-
-    for (int i = 0; i < glfwExtensionCount; ++i) {
-      bool found = false;
-      for (const auto &extensionProperty : extensionProperties) {
-        if (strcmp(extensionProperty.extensionName, glfwExtensions[i])) {
-          found = true;
-          break;
-        }
-        if (!found)
-          std::runtime_error("Required GLFW Extension not supported! " +
-                             std::string(glfwExtensions[i]));
-      }
-    }
-    auto extensions = getRequiredExtensions();
-    std::cout << "Using validation Layers: " << '\n';
-    for (int i = 0; i < static_cast<uint32_t>(glfwExtensions.size()); i++) {
-      std::cout << '\t' << glfwExtensions[i] << '\n';
-    }
-
-    std::cout << "End validation layers" << '\n';
-    vk::InstanceCreateInfo createInfo{
-        .pApplicationInfo = &appInfo,
-        .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
-        .ppEnabledLayerNames = requiredLayers.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(glfwExtensions.size()),
-        .ppEnabledExtensionNames = glfwExtensions.data(),
-    };
-
-    m_Instance = vk::raii::Instance(m_RaiiContext, createInfo);
   }
 
   void mainLoop() {
@@ -790,8 +703,6 @@ private:
     m_PresentQueue.clear();
     m_Device.clear();
     m_Surface.clear();
-    m_DebugMessenger.clear();
-    m_Instance.clear();
 
     if (m_Window) {
       glfwDestroyWindow(m_Window);
@@ -1032,9 +943,7 @@ private:
 
 private:
   GLFWwindow *m_Window;
-  vk::raii::Context m_RaiiContext;
-  vk::raii::Instance m_Instance = nullptr;
-  vk::raii::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
+  Renderer::Instance m_Instance;
   vk::raii::SurfaceKHR m_Surface = nullptr;
   vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
   vk::raii::Device m_Device = nullptr;
