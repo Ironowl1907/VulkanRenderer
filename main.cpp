@@ -56,9 +56,13 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+};
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0,
 };
 
 std::vector<const char *> getRequiredExtensions() {
@@ -106,8 +110,32 @@ private:
     createGraphicsPipeline();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
+  }
+
+  void createIndexBuffer() {
+    vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    vk::raii::Buffer stagingBuffer({});
+    vk::raii::DeviceMemory stagingBufferMemory({});
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+                 vk::MemoryPropertyFlagBits::eHostVisible |
+                     vk::MemoryPropertyFlagBits::eHostCoherent,
+                 stagingBuffer, stagingBufferMemory);
+
+    void *data = stagingBufferMemory.mapMemory(0, bufferSize);
+    memcpy(data, indices.data(), (size_t)bufferSize);
+    stagingBufferMemory.unmapMemory();
+
+    createBuffer(bufferSize,
+                 vk::BufferUsageFlagBits::eTransferDst |
+                     vk::BufferUsageFlagBits::eIndexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, m_IndexBuffer,
+                 m_IndexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_IndexBuffer, bufferSize);
   }
 
   void createVertexBuffer() {
@@ -740,6 +768,9 @@ private:
       m_Device.waitIdle();
     }
 
+    m_IndexBufferMemory.clear();
+    m_IndexBuffer.clear();
+
     m_VertexBufferMemory.clear();
     m_VertexBuffer.clear();
     for (auto &a : m_ImageAvailableSemaphores)
@@ -831,8 +862,10 @@ private:
         vk::PipelineBindPoint::eGraphics, *m_GraphicsPipeline);
 
     m_CommandBuffers[m_CurrentFrame].bindVertexBuffers(0, *m_VertexBuffer, {0});
+    m_CommandBuffers[m_CurrentFrame].bindIndexBuffer(m_IndexBuffer, 0,
+                                                     vk::IndexType::eUint16);
 
-    m_CommandBuffers[m_CurrentFrame].draw(3, 1, 0, 0);
+    m_CommandBuffers[m_CurrentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
 
     m_CommandBuffers[m_CurrentFrame].endRendering();
 
@@ -1040,8 +1073,10 @@ private:
   bool m_FramebufferResized = false;
 
   vk::raii::Buffer m_VertexBuffer = nullptr;
-
   vk::raii::DeviceMemory m_VertexBufferMemory = nullptr;
+
+  vk::raii::Buffer m_IndexBuffer = nullptr;
+  vk::raii::DeviceMemory m_IndexBufferMemory = nullptr;
 };
 
 int main() {
