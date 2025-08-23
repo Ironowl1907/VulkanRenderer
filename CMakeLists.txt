@@ -7,7 +7,7 @@ project(VulkanRenderer)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_executable(Renderer main.cpp)
+add_executable(Renderer main.cpp ./src/Renderer/Instance/Instance.cpp)
 
 add_custom_target(run
   COMMAND ./build/Renderer
