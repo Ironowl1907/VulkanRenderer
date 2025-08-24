@@ -11,13 +11,13 @@ public:
   Device();
   ~Device();
 
-  void Create();
+  void Create(Renderer::Instance &instance, const vk::SurfaceKHR &surface);
 
   vk::raii::PhysicalDevice &GetPhysicalDevice() { return m_PhysicalDevice; }
   vk::raii::Device &GetDevice() { return m_Device; }
 
   void PickPhysicalDevice(Renderer::Instance &instance);
-  void CreateLogicalDevice(vk::SurfaceKHR &surface);
+  void CreateLogicalDevice(const vk::SurfaceKHR &surface);
 
   // TODO: HACK implementation, remove for a queue handler
   vk::raii::Queue GetGraphicsQueue() { return m_GraphicsQueue; }
@@ -32,6 +32,10 @@ private:
   vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
   vk::raii::Device m_Device = nullptr;
 
+  // TODO : Remove
+  vk::raii::Queue m_GraphicsQueue = nullptr;
+  vk::raii::Queue m_PresentQueue = nullptr;
+
   std::vector<const char *> m_RequiredDeviceExtensions = {
       vk::KHRSwapchainExtensionName,
       vk::KHRSpirv14ExtensionName,
@@ -42,9 +46,5 @@ private:
 
   uint32_t m_GraphicsIndex;
   uint32_t m_PresentIndex;
-
-  // TODO : Remove
-  vk::raii::Queue m_GraphicsQueue = nullptr;
-  vk::raii::Queue m_PresentQueue = nullptr;
 };
 } // namespace Renderer

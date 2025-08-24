@@ -95,7 +95,7 @@ void Instance::Create(const char *appName) {
   for (int i = 0; i < glfwExtensionCount; ++i) {
     bool found = false;
     for (const auto &extensionProperty : extensionProperties) {
-      if (strcmp(extensionProperty.extensionName, glfwExtensions[i])) {
+      if (strcmp(extensionProperty.extensionName, glfwExtensions[i]) == 0) {
         found = true;
         break;
       }

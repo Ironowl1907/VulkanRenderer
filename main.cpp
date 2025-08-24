@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include <glm/glm.hpp>
+#include <vulkan/vulkan_core.h>
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
@@ -104,6 +105,7 @@ private:
   void initVulkan() {
     m_Instance.Create("Vulkan App");
     createSurface();
+    m_DeviceHand.Create(m_Instance, *m_Surface);
     createSwapChain();
     createImageViews();
     createGraphicsPipeline();

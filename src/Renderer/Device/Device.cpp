@@ -5,7 +5,11 @@ namespace Renderer {
 Device::Device() {}
 Device::~Device() {}
 
-void Device::Create() {}
+void Device::Create(Renderer::Instance &instance,
+                    const vk::SurfaceKHR &surface) {
+  PickPhysicalDevice(instance);
+  CreateLogicalDevice(surface);
+}
 
 void Device::PickPhysicalDevice(Renderer::Instance &instance) {
   auto devices = instance.GetRaii().enumeratePhysicalDevices();
@@ -54,14 +58,19 @@ void Device::PickPhysicalDevice(Renderer::Instance &instance) {
 
     if (supportsVulkan1_3 && supportsGraphics &&
         supportsAllRequiredExtensions && supportsRequiredFeatures) {
-      m_PhysicalDevice = device;
+      m_PhysicalDevice =
+          std::move(vk::raii::PhysicalDevice(instance.GetRaii(), *device));
       return;
     }
   }
   throw std::runtime_error("failed to find a suitable GPU!");
 }
 
-void Device::CreateLogicalDevice(vk::SurfaceKHR &surface) {
+void Device::CreateLogicalDevice(const vk::SurfaceKHR &surface) {
+  if (m_PhysicalDevice == nullptr) {
+    throw std::runtime_error("Physical device not initialized!");
+  }
+
   // find the index of the first queue family that supports graphics
   std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
       m_PhysicalDevice.getQueueFamilyProperties();
@@ -145,7 +154,6 @@ void Device::CreateLogicalDevice(vk::SurfaceKHR &surface) {
       static_cast<uint32_t>(m_RequiredDeviceExtensions.size());
   deviceCreateInfo.ppEnabledExtensionNames = m_RequiredDeviceExtensions.data();
 
-  deviceCreateInfo.enabledExtensionCount = m_RequiredDeviceExtensions.size();
   deviceCreateInfo.ppEnabledExtensionNames = m_RequiredDeviceExtensions.data();
 
   // m_Device = vk::Device(m_PhysicalDevice, deviceCreateInfo);
