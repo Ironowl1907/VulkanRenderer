@@ -2,7 +2,7 @@
 
 #include "../Instance/Instance.h"
 #include <cstdint>
-#include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace Renderer {
 
@@ -13,21 +13,24 @@ public:
 
   void Create();
 
-  vk::PhysicalDevice &GetPhysicalDeivice() { return m_PhysicalDevice; }
-  vk::Device &GetDevice() { return m_Device; }
+  vk::raii::PhysicalDevice &GetPhysicalDevice() { return m_PhysicalDevice; }
+  vk::raii::Device &GetDevice() { return m_Device; }
 
   void PickPhysicalDevice(Renderer::Instance &instance);
   void CreateLogicalDevice(vk::SurfaceKHR &surface);
 
   // TODO: HACK implementation, remove for a queue handler
-  vk::Queue GetGraphicsQueue() { return m_GraphicsQueue; }
-  vk::Queue GetPresentQueue() { return m_PresentQueue; }
+  vk::raii::Queue GetGraphicsQueue() { return m_GraphicsQueue; }
+  vk::raii::Queue GetPresentQueue() { return m_PresentQueue; }
+
+  uint32_t GetGraphicsIndex() { return m_GraphicsIndex; }
+  uint32_t GetPresentIndex() { return m_PresentIndex; }
 
   void clean();
 
 private:
-  vk::PhysicalDevice m_PhysicalDevice;
-  vk::Device m_Device;
+  vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
+  vk::raii::Device m_Device = nullptr;
 
   std::vector<const char *> m_RequiredDeviceExtensions = {
       vk::KHRSwapchainExtensionName,
@@ -41,7 +44,7 @@ private:
   uint32_t m_PresentIndex;
 
   // TODO : Remove
-  vk::Queue m_GraphicsQueue = nullptr;
-  vk::Queue m_PresentQueue = nullptr;
+  vk::raii::Queue m_GraphicsQueue = nullptr;
+  vk::raii::Queue m_PresentQueue = nullptr;
 };
 } // namespace Renderer
