@@ -105,6 +105,11 @@ private:
     createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
+
+    // This should trigger a validation error
+    VkBuffer invalidBuffer = VK_NULL_HANDLE;
+    vkDestroyBuffer(*m_DeviceHand.GetDevice(), invalidBuffer,
+                    nullptr); // Should produce validation error
   }
 
   void createIndexBuffer() {
