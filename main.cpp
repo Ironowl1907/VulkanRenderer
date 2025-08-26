@@ -416,7 +416,7 @@ private:
       }
     }
     if (graphicsQueueFamilyProperty == queueFamilyProperties.end()) {
-      std::runtime_error("no available queue with graphics support");
+      throw std::runtime_error("no available queue with graphics support");
     }
 
     m_GraphicsIndex = static_cast<uint32_t>(std::distance(
@@ -637,15 +637,15 @@ private:
             "One or more required layers are not supported!");
       }
     }
-    uint32_t glfwExtensionCount = 0;
     auto glfwExtensions = getRequiredExtensions();
+    uint32_t glfwExtensionCount = static_cast<uint32_t>(glfwExtensions.size());
 
     // Check if the required GLFW extensions are supported by the Vulkan
     // implementation.
     auto extensionProperties =
         m_RaiiContext.enumerateInstanceExtensionProperties();
 
-    for (int i = 0; i < glfwExtensionCount; ++i) {
+    for (uint32_t i = 0; i < glfwExtensionCount; ++i) {
       bool found = false;
       for (const auto &extensionProperty : extensionProperties) {
         if (strcmp(extensionProperty.extensionName, glfwExtensions[i])) {
@@ -659,7 +659,8 @@ private:
     }
     auto extensions = getRequiredExtensions();
     std::cout << "Using validation Layers: " << '\n';
-    for (int i = 0; i < static_cast<uint32_t>(glfwExtensions.size()); i++) {
+    for (uint32_t i = 0; i < static_cast<uint32_t>(glfwExtensions.size());
+         i++) {
       std::cout << '\t' << glfwExtensions[i] << '\n';
     }
 
@@ -1068,7 +1069,6 @@ private:
   std::vector<vk::raii::Semaphore> m_RenderFinishedSemaphores;
   std::vector<vk::raii::Fence> m_InFlightFences;
   uint32_t m_CurrentFrame = 0;
-  uint32_t m_SemaphoreIndex = 0;
 
   bool m_FramebufferResized = false;
 
