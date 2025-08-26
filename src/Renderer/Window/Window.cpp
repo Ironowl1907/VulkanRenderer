@@ -3,6 +3,9 @@
 
 namespace Renderer {
 
+Window::Window() {}
+Window::~Window() {}
+
 void Window::CreateSurface(Renderer::Instance &instance) {
   VkSurfaceKHR _surface;
   if (glfwCreateWindowSurface(instance.Get(), m_Window, nullptr, &_surface) !=
@@ -25,7 +28,16 @@ void Window::InitWindow(uint32_t width, uint32_t height,
   glfwSetFramebufferSizeCallback(m_Window, resizeCallback);
 }
 
-void Window::Cleanup() {
+[[deprecated("Hey! don't use this")]]
+void Window::Create(uint32_t width, uint32_t height,
+                    void (*resizeCallback)(GLFWwindow *window, int width,
+                                           int height),
+                    Renderer::Instance &instance) {
+  InitWindow(width, height, resizeCallback);
+  CreateSurface(instance);
+}
+
+void Window::Clean() {
   glfwDestroyWindow(m_Window);
   glfwTerminate();
 }

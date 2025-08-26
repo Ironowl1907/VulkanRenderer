@@ -18,6 +18,7 @@
 
 #include "src/Renderer/Device/Device.h"
 #include "src/Renderer/Instance/Instance.h"
+#include "src/Renderer/Window/Window.h"
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
@@ -85,27 +86,17 @@ public:
   void run() {
     std::cout << "Using debug validation layers: "
               << ((enableValidationLayers) ? "YES" : "NO") << '\n';
-    initWindow();
+    m_Window.InitWindow(WIDTH, HEIGHT, framebufferResizeCallback);
     initVulkan();
     mainLoop();
     cleanup();
   }
 
 private:
-  void initWindow() {
-    glfwInit();
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(m_Window, this);
-    glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallback);
-  }
   void initVulkan() {
     m_Instance.Create("Vulkan App");
-    createSurface();
-    m_DeviceHand.Create(m_Instance, *m_Surface);
+    m_Window.CreateSurface(m_Instance);
+    m_DeviceHand.Create(m_Instance, *m_Window.GetSurface());
     createSwapChain();
     createImageViews();
     createGraphicsPipeline();
@@ -357,10 +348,12 @@ private:
 
   void createSwapChain() {
     auto surfaceCapabilities =
-        m_DeviceHand.GetPhysicalDevice().getSurfaceCapabilitiesKHR(m_Surface);
+        m_DeviceHand.GetPhysicalDevice().getSurfaceCapabilitiesKHR(
+            *m_Window.GetSurface());
 
     auto swapChainSurfaceFormat = chooseSwapSurfaceFormat(
-        m_DeviceHand.GetPhysicalDevice().getSurfaceFormatsKHR(m_Surface));
+        m_DeviceHand.GetPhysicalDevice().getSurfaceFormatsKHR(
+            m_Window.GetSurface()));
 
     auto swapChainExtent = chooseSwapExtent(surfaceCapabilities);
 
@@ -379,7 +372,7 @@ private:
 
     vk::SwapchainCreateInfoKHR swapChainCreateInfo{
         .flags = vk::SwapchainCreateFlagsKHR(),
-        .surface = m_Surface,
+        .surface = *m_Window.GetSurface(),
         .minImageCount = minImageCount,
         .imageFormat = swapChainSurfaceFormat.format,
         .imageColorSpace = swapChainSurfaceFormat.colorSpace,
@@ -391,7 +384,7 @@ private:
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
         .presentMode = chooseSwapPresentMode(
             m_DeviceHand.GetPhysicalDevice().getSurfacePresentModesKHR(
-                m_Surface)),
+                *m_Window.GetSurface())),
         .clipped = true,
         .oldSwapchain = nullptr,
     };
@@ -401,15 +394,6 @@ private:
 
     m_SwapChainImageFormat = swapChainSurfaceFormat.format;
     m_SwapChainExtent = swapChainExtent;
-  }
-
-  void createSurface() {
-    VkSurfaceKHR _surface;
-    if (glfwCreateWindowSurface(m_Instance.Get(), m_Window, nullptr,
-                                &_surface) != 0) {
-      throw std::runtime_error("failed to create window surface!");
-    }
-    m_Surface = vk::raii::SurfaceKHR(m_Instance.GetRaii(), _surface);
   }
 
   vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
@@ -441,7 +425,7 @@ private:
       return capabilities.currentExtent;
     }
     int width, height;
-    glfwGetFramebufferSize(m_Window, &width, &height);
+    glfwGetFramebufferSize(m_Window.GetWindow(), &width, &height);
 
     return {
         std::clamp<uint32_t>(width, capabilities.minImageExtent.width,
@@ -452,7 +436,7 @@ private:
   }
 
   void mainLoop() {
-    while (!glfwWindowShouldClose(m_Window)) {
+    while (!glfwWindowShouldClose(m_Window.GetWindow())) {
       glfwPollEvents();
       drawFrame();
     }
@@ -560,14 +544,6 @@ private:
     m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
     cleanupSwapChain();
-    m_Surface.clear();
-
-    if (m_Window) {
-      glfwDestroyWindow(m_Window);
-      m_Window = nullptr;
-    }
-    glfwDestroyWindow(m_Window);
-    glfwTerminate();
   }
 
   static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
@@ -729,9 +705,9 @@ private:
   void recreateSwapChain() {
     // std::cout << "Recreating the swapchain" << std::endl;
     int width = 0, height = 0;
-    glfwGetFramebufferSize(m_Window, &width, &height);
+    glfwGetFramebufferSize(m_Window.GetWindow(), &width, &height);
     while (width == 0 || height == 0) {
-      glfwGetFramebufferSize(m_Window, &width, &height);
+      glfwGetFramebufferSize(m_Window.GetWindow(), &width, &height);
       glfwWaitEvents();
     }
 
@@ -800,9 +776,8 @@ private:
   }
 
 private:
-  GLFWwindow *m_Window;
   Renderer::Instance m_Instance;
-  vk::raii::SurfaceKHR m_Surface = nullptr;
+  Renderer::Window m_Window;
   Renderer::Device m_DeviceHand;
 
   vk::Format m_SwapChainImageFormat = vk::Format::eUndefined;

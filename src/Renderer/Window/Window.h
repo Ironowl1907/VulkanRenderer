@@ -12,7 +12,9 @@ public:
   Window();
   ~Window();
 
-  void Create();
+  void Create(uint32_t width, uint32_t height,
+              void (*resizeCallback)(GLFWwindow *window, int width, int height),
+              Renderer::Instance &instance);
   void Clean();
 
   void CreateSurface(Renderer::Instance &instance);
@@ -21,11 +23,12 @@ public:
                   void (*resizeCallback)(GLFWwindow *window, int width,
                                          int height));
 
-  void Cleanup();
+  GLFWwindow *GetWindow() { return m_Window; }
+  vk::raii::SurfaceKHR &GetSurface() { return m_Surface; }
 
 private:
   GLFWwindow *m_Window;
-  vk::raii::SurfaceKHR m_Surface;
+  vk::raii::SurfaceKHR m_Surface = nullptr;
 };
 
 } // namespace Renderer
