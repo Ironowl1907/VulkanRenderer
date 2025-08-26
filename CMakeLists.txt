@@ -10,6 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(Renderer main.cpp
   ./src/Renderer/Instance/Instance.cpp
   ./src/Renderer/Device/Device.cpp
+  ./src/Renderer/Window/Window.cpp
 
 )
 
