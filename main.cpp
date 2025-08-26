@@ -526,6 +526,8 @@ private:
 
   void cleanup() {
 
+    m_DeviceHand.GetDevice().waitIdle();
+
     m_IndexBufferMemory.clear();
     m_IndexBuffer.clear();
 
