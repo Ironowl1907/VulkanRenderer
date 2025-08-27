@@ -809,7 +809,6 @@ private:
   std::vector<vk::raii::Semaphore> m_RenderFinishedSemaphores;
   std::vector<vk::raii::Fence> m_InFlightFences;
   uint32_t m_CurrentFrame = 0;
-  uint32_t m_SemaphoreIndex = 0;
 
   bool m_FramebufferResized = false;
 
