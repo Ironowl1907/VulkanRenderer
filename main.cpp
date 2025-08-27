@@ -19,6 +19,7 @@
 
 #include "src/Renderer/Device/Device.h"
 #include "src/Renderer/Instance/Instance.h"
+#include "src/Renderer/Swapchain/Swapchain.h"
 #include "src/Renderer/Window/Window.h"
 
 constexpr uint32_t WIDTH = 800;
@@ -101,8 +102,11 @@ private:
     m_Window->CreateSurface(*m_Instance);
     m_DeviceHand = std::make_unique<Renderer::Device>(*m_Instance,
                                                       *m_Window->GetSurface());
-    createSwapChain();
-    createImageViews();
+
+    m_SwapChain =
+        std::make_unique<Renderer::Swapchain>(*m_DeviceHand, *m_Window);
+    m_SwapChain->CreateImageViews(*m_DeviceHand);
+
     createGraphicsPipeline();
     createCommandPool();
     createVertexBuffer();
@@ -114,6 +118,95 @@ private:
     VkBuffer invalidBuffer = VK_NULL_HANDLE;
     vkDestroyBuffer(*m_DeviceHand->GetDevice(), invalidBuffer,
                     nullptr); // Should produce validation error
+  }
+
+  void createGraphicsPipeline() {
+    vk::raii::ShaderModule shaderModule =
+        createShaderModule(readFile("shaders/slang.spv"));
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eVertex,
+        .module = shaderModule,
+        .pName = "vertMain"};
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eFragment,
+        .module = shaderModule,
+        .pName = "fragMain"};
+    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
+                                                        fragShaderStageInfo};
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+
+    vertexInputInfo.vertexAttributeDescriptionCount = 2;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+        .topology = vk::PrimitiveTopology::eTriangleList};
+    vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1,
+                                                      .scissorCount = 1};
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer{
+        .depthClampEnable = vk::False,
+        .rasterizerDiscardEnable = vk::False,
+        .polygonMode = vk::PolygonMode::eFill,
+        .cullMode = vk::CullModeFlagBits::eBack,
+        .frontFace = vk::FrontFace::eClockwise,
+        .depthBiasEnable = vk::False,
+        .depthBiasSlopeFactor = 1.0f,
+        .lineWidth = 1.0f};
+
+    vk::PipelineMultisampleStateCreateInfo multisampling{
+        .rasterizationSamples = vk::SampleCountFlagBits::e1,
+        .sampleShadingEnable = vk::False};
+
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment{
+        .blendEnable = vk::False,
+        .colorWriteMask =
+            vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending{
+        .logicOpEnable = vk::False,
+        .logicOp = vk::LogicOp::eCopy,
+        .attachmentCount = 1,
+        .pAttachments = &colorBlendAttachment};
+
+    std::vector dynamicStates = {vk::DynamicState::eViewport,
+                                 vk::DynamicState::eScissor};
+    vk::PipelineDynamicStateCreateInfo dynamicState{
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates = dynamicStates.data()};
+
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
+        .setLayoutCount = 0, .pushConstantRangeCount = 0};
+
+    m_PipelineLayout =
+        vk::raii::PipelineLayout(m_DeviceHand->GetDevice(), pipelineLayoutInfo);
+
+    vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &m_SwapChain->GetFormat(),
+    };
+    vk::GraphicsPipelineCreateInfo pipelineInfo{
+        .pNext = &pipelineRenderingCreateInfo,
+        .stageCount = 2,
+        .pStages = shaderStages,
+        .pVertexInputState = &vertexInputInfo,
+        .pInputAssemblyState = &inputAssembly,
+        .pViewportState = &viewportState,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pColorBlendState = &colorBlending,
+        .pDynamicState = &dynamicState,
+        .layout = m_PipelineLayout,
+        .renderPass = nullptr};
+
+    m_GraphicsPipeline =
+        vk::raii::Pipeline(m_DeviceHand->GetDevice(), nullptr, pipelineInfo);
   }
 
   void createIndexBuffer() {
@@ -220,7 +313,7 @@ private:
     m_RenderFinishedSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
     m_InFlightFences.reserve(MAX_FRAMES_IN_FLIGHT);
 
-    for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
+    for (size_t i = 0; i < m_SwapChain->GetImages().size(); i++) {
       m_ImageAvailableSemaphores.emplace_back(
           m_DeviceHand->GetDevice().createSemaphore({}));
       m_RenderFinishedSemaphores.emplace_back(
@@ -253,197 +346,6 @@ private:
     m_CommandPool = vk::raii::CommandPool(m_DeviceHand->GetDevice(), poolInfo);
   }
 
-  void createGraphicsPipeline() {
-    vk::raii::ShaderModule shaderModule =
-        createShaderModule(readFile("shaders/slang.spv"));
-
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
-        .stage = vk::ShaderStageFlagBits::eVertex,
-        .module = shaderModule,
-        .pName = "vertMain"};
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
-        .stage = vk::ShaderStageFlagBits::eFragment,
-        .module = shaderModule,
-        .pName = "fragMain"};
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
-                                                        fragShaderStageInfo};
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions();
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-
-    vertexInputInfo.vertexAttributeDescriptionCount = 2;
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-        .topology = vk::PrimitiveTopology::eTriangleList};
-    vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1,
-                                                      .scissorCount = 1};
-
-    vk::PipelineRasterizationStateCreateInfo rasterizer{
-        .depthClampEnable = vk::False,
-        .rasterizerDiscardEnable = vk::False,
-        .polygonMode = vk::PolygonMode::eFill,
-        .cullMode = vk::CullModeFlagBits::eBack,
-        .frontFace = vk::FrontFace::eClockwise,
-        .depthBiasEnable = vk::False,
-        .depthBiasSlopeFactor = 1.0f,
-        .lineWidth = 1.0f};
-
-    vk::PipelineMultisampleStateCreateInfo multisampling{
-        .rasterizationSamples = vk::SampleCountFlagBits::e1,
-        .sampleShadingEnable = vk::False};
-
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-        .blendEnable = vk::False,
-        .colorWriteMask =
-            vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
-
-    vk::PipelineColorBlendStateCreateInfo colorBlending{
-        .logicOpEnable = vk::False,
-        .logicOp = vk::LogicOp::eCopy,
-        .attachmentCount = 1,
-        .pAttachments = &colorBlendAttachment};
-
-    std::vector dynamicStates = {vk::DynamicState::eViewport,
-                                 vk::DynamicState::eScissor};
-    vk::PipelineDynamicStateCreateInfo dynamicState{
-        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-        .pDynamicStates = dynamicStates.data()};
-
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
-        .setLayoutCount = 0, .pushConstantRangeCount = 0};
-
-    m_PipelineLayout =
-        vk::raii::PipelineLayout(m_DeviceHand->GetDevice(), pipelineLayoutInfo);
-
-    vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &m_SwapChainImageFormat};
-    vk::GraphicsPipelineCreateInfo pipelineInfo{
-        .pNext = &pipelineRenderingCreateInfo,
-        .stageCount = 2,
-        .pStages = shaderStages,
-        .pVertexInputState = &vertexInputInfo,
-        .pInputAssemblyState = &inputAssembly,
-        .pViewportState = &viewportState,
-        .pRasterizationState = &rasterizer,
-        .pMultisampleState = &multisampling,
-        .pColorBlendState = &colorBlending,
-        .pDynamicState = &dynamicState,
-        .layout = m_PipelineLayout,
-        .renderPass = nullptr};
-
-    m_GraphicsPipeline =
-        vk::raii::Pipeline(m_DeviceHand->GetDevice(), nullptr, pipelineInfo);
-  }
-
-  void createImageViews() {
-    m_SwapChainImageViews.clear();
-
-    vk::ImageViewCreateInfo imageViewCreateInfo{
-        .viewType = vk::ImageViewType::e2D,
-        .format = m_SwapChainImageFormat,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
-    for (auto image : m_SwapChainImages) {
-      imageViewCreateInfo.image = image;
-      m_SwapChainImageViews.emplace_back(m_DeviceHand->GetDevice(),
-                                         imageViewCreateInfo);
-    }
-  }
-
-  void createSwapChain() {
-    auto surfaceCapabilities =
-        m_DeviceHand->GetPhysicalDevice().getSurfaceCapabilitiesKHR(
-            *m_Window->GetSurface());
-
-    auto swapChainSurfaceFormat = chooseSwapSurfaceFormat(
-        m_DeviceHand->GetPhysicalDevice().getSurfaceFormatsKHR(
-            m_Window->GetSurface()));
-
-    auto swapChainExtent = chooseSwapExtent(surfaceCapabilities);
-
-    auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
-
-    minImageCount = (surfaceCapabilities.maxImageCount > 0 &&
-                     minImageCount > surfaceCapabilities.maxImageCount)
-                        ? surfaceCapabilities.maxImageCount
-                        : minImageCount;
-
-    uint32_t imageCount = surfaceCapabilities.minImageCount + 1;
-    if (surfaceCapabilities.maxImageCount > 0 &&
-        imageCount > surfaceCapabilities.maxImageCount) {
-      imageCount = surfaceCapabilities.maxImageCount;
-    }
-
-    vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-        .flags = vk::SwapchainCreateFlagsKHR(),
-        .surface = *m_Window->GetSurface(),
-        .minImageCount = minImageCount,
-        .imageFormat = swapChainSurfaceFormat.format,
-        .imageColorSpace = swapChainSurfaceFormat.colorSpace,
-        .imageExtent = swapChainExtent,
-        .imageArrayLayers = 1,
-        .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-        .imageSharingMode = vk::SharingMode::eExclusive,
-        .preTransform = surfaceCapabilities.currentTransform,
-        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-        .presentMode = chooseSwapPresentMode(
-            m_DeviceHand->GetPhysicalDevice().getSurfacePresentModesKHR(
-                *m_Window->GetSurface())),
-        .clipped = true,
-        .oldSwapchain = nullptr,
-    };
-    m_SwapChain =
-        vk::raii::SwapchainKHR(m_DeviceHand->GetDevice(), swapChainCreateInfo);
-    m_SwapChainImages = m_SwapChain.getImages();
-
-    m_SwapChainImageFormat = swapChainSurfaceFormat.format;
-    m_SwapChainExtent = swapChainExtent;
-  }
-
-  vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
-      const std::vector<vk::SurfaceFormatKHR> &availableFormats) {
-    for (const auto &availableFormat : availableFormats) {
-      if (availableFormat.format == vk::Format::eB8G8R8A8Srgb &&
-          availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-        return availableFormat;
-      }
-    }
-
-    return availableFormats[0];
-  }
-
-  vk::PresentModeKHR chooseSwapPresentMode(
-      const std::vector<vk::PresentModeKHR> &availablePresentModes) {
-    for (const auto &availablePresentMode : availablePresentModes) {
-      if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
-        return availablePresentMode;
-      }
-    }
-    return vk::PresentModeKHR::eFifo;
-  }
-
-  vk::Extent2D
-  chooseSwapExtent(const vk::SurfaceCapabilitiesKHR &capabilities) {
-    if (capabilities.currentExtent.width !=
-        std::numeric_limits<uint32_t>::max()) {
-      return capabilities.currentExtent;
-    }
-    int width, height;
-    glfwGetFramebufferSize(m_Window->GetWindow(), &width, &height);
-
-    return {
-        std::clamp<uint32_t>(width, capabilities.minImageExtent.width,
-                             capabilities.maxImageExtent.width),
-        std::clamp<uint32_t>(height, capabilities.minImageExtent.height,
-                             capabilities.maxImageExtent.height),
-    };
-  }
-
   void mainLoop() {
     while (!glfwWindowShouldClose(m_Window->GetWindow())) {
       glfwPollEvents();
@@ -458,7 +360,7 @@ private:
                *m_InFlightFences[m_CurrentFrame], vk::True, UINT64_MAX))
       ;
 
-    auto [result, imageIndex] = m_SwapChain.acquireNextImage(
+    auto [result, imageIndex] = m_SwapChain->Get().acquireNextImage(
         UINT64_MAX,
         m_ImageAvailableSemaphores[m_CurrentFrame], // Use frame-based
                                                     // semaphore for acquire
@@ -467,7 +369,7 @@ private:
     if (result == vk::Result::eErrorOutOfDateKHR ||
         result == vk::Result::eSuboptimalKHR) {
       m_FramebufferResized = false;
-      recreateSwapChain();
+      m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
       return;
     }
 
@@ -507,7 +409,7 @@ private:
             &*m_RenderFinishedSemaphores[imageIndex], // Wait for render of
                                                       // THIS image
         .swapchainCount = 1,
-        .pSwapchains = &*m_SwapChain,
+        .pSwapchains = &*m_SwapChain->Get(),
         .pImageIndices = &imageIndex,
     };
 
@@ -519,7 +421,7 @@ private:
 
     case vk::Result::eErrorOutOfDateKHR:
     case vk::Result::eSuboptimalKHR:
-      recreateSwapChain();
+      m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
       break;
     default:
       break;
@@ -527,7 +429,7 @@ private:
 
     if (m_FramebufferResized) {
       m_FramebufferResized = false;
-      recreateSwapChain();
+      m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
     }
 
     m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -554,7 +456,7 @@ private:
     m_CommandPool.clear();
     m_GraphicsPipeline.clear();
     m_PipelineLayout.clear();
-    cleanupSwapChain();
+    m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
   }
 
   static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
@@ -579,17 +481,17 @@ private:
     );
 
     vk::ClearValue clearColor =
-        vk::ClearValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
+        vk::ClearValue{{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}}};
 
     vk::RenderingAttachmentInfo attachmentInfo = {
-        .imageView = m_SwapChainImageViews[imageIndex],
+        .imageView = m_SwapChain->GetImageViews()[imageIndex],
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
         .clearValue = clearColor};
 
     vk::RenderingInfo renderingInfo = {
-        .renderArea = {.offset = {0, 0}, .extent = m_SwapChainExtent},
+        .renderArea = {.offset = {0, 0}, .extent = m_SwapChain->GetExtend2D()},
         .layerCount = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments = &attachmentInfo};
@@ -600,15 +502,15 @@ private:
     vk::Viewport viewport{
         .x = 0.0f,
         .y = 0.0f,
-        .width = static_cast<float>(m_SwapChainExtent.width),
-        .height = static_cast<float>(m_SwapChainExtent.height),
+        .width = static_cast<float>(m_SwapChain->GetExtend2D().width),
+        .height = static_cast<float>(m_SwapChain->GetExtend2D().height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
 
     vk::Rect2D scissor{
         .offset = {0, 0},
-        .extent = m_SwapChainExtent,
+        .extent = m_SwapChain->GetExtend2D(),
     };
 
     m_CommandBuffers[m_CurrentFrame].setViewport(0, viewport);
@@ -652,7 +554,7 @@ private:
         .newLayout = newLayout,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = m_SwapChainImages[imageIndex],
+        .image = m_SwapChain->GetImages()[imageIndex],
         .subresourceRange =
             {
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -704,29 +606,6 @@ private:
 
     file.close();
     return buffer;
-  }
-
-  void cleanupSwapChain() {
-    m_SwapChainImageViews.clear();
-    m_SwapChain.clear();
-
-    m_SwapChain = nullptr;
-  }
-
-  void recreateSwapChain() {
-    // std::cout << "Recreating the swapchain" << std::endl;
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(m_Window->GetWindow(), &width, &height);
-    while (width == 0 || height == 0) {
-      glfwGetFramebufferSize(m_Window->GetWindow(), &width, &height);
-      glfwWaitEvents();
-    }
-
-    m_DeviceHand->GetDevice().waitIdle();
-
-    cleanupSwapChain();
-    createSwapChain();
-    createImageViews();
   }
 
   [[nodiscard]] vk::raii::ShaderModule
@@ -790,12 +669,7 @@ private:
   std::unique_ptr<Renderer::Instance> m_Instance;
   std::unique_ptr<Renderer::Window> m_Window;
   std::unique_ptr<Renderer::Device> m_DeviceHand;
-
-  vk::Format m_SwapChainImageFormat = vk::Format::eUndefined;
-  vk::Extent2D m_SwapChainExtent;
-  std::vector<vk::Image> m_SwapChainImages;
-  vk::raii::SwapchainKHR m_SwapChain = nullptr;
-  std::vector<vk::raii::ImageView> m_SwapChainImageViews;
+  std::unique_ptr<Renderer::Swapchain> m_SwapChain;
 
   vk::raii::PipelineLayout m_PipelineLayout = nullptr;
 

@@ -7,6 +7,7 @@ add_executable(Renderer main.cpp
   ./src/Renderer/Instance/Instance.cpp
   ./src/Renderer/Device/Device.cpp
   ./src/Renderer/Window/Window.cpp
+  ./src/Renderer/Swapchain/Swapchain.cpp
 
 
 )
