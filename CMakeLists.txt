@@ -3,11 +3,12 @@ project(VulkanRenderer)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_executable(Renderer main.cpp
+  ./src/Renderer/Instance/Instance.cpp
+  ./src/Renderer/Device/Device.cpp
+  ./src/Renderer/Window/Window.cpp
 
-add_executable(Renderer
-    main.cpp
+
 )
 
 add_custom_target(run
