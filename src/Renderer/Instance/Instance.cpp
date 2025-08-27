@@ -84,9 +84,8 @@ void Instance::SetupDebugMessenger() {
 //             << std::endl;
 // }
 
-Instance::Instance() {}
+Instance::Instance(const char *appName) {
 
-void Instance::Create(const char *appName) {
   std::cout << "Creating Vulkan instance with validation layers: "
             << (enableValidationLayers ? "ENABLED" : "DISABLED") << std::endl;
 

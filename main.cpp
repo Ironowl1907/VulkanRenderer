@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 
 #include <glm/glm.hpp>
@@ -86,7 +87,9 @@ public:
   void run() {
     std::cout << "Using debug validation layers: "
               << ((enableValidationLayers) ? "YES" : "NO") << '\n';
-    m_Window.InitWindow(WIDTH, HEIGHT, framebufferResizeCallback);
+
+    m_Window = std::make_unique<Renderer::Window>(WIDTH, HEIGHT,
+                                                  framebufferResizeCallback);
     initVulkan();
     mainLoop();
     cleanup();
@@ -94,9 +97,10 @@ public:
 
 private:
   void initVulkan() {
-    m_Instance.Create("Vulkan App");
-    m_Window.CreateSurface(m_Instance);
-    m_DeviceHand.Create(m_Instance, *m_Window.GetSurface());
+    m_Instance = std::make_unique<Renderer::Instance>("Vulkan App");
+    m_Window->CreateSurface(*m_Instance);
+    m_DeviceHand = std::make_unique<Renderer::Device>(*m_Instance,
+                                                      *m_Window->GetSurface());
     createSwapChain();
     createImageViews();
     createGraphicsPipeline();
@@ -108,7 +112,7 @@ private:
 
     // This should trigger a validation error
     VkBuffer invalidBuffer = VK_NULL_HANDLE;
-    vkDestroyBuffer(*m_DeviceHand.GetDevice(), invalidBuffer,
+    vkDestroyBuffer(*m_DeviceHand->GetDevice(), invalidBuffer,
                     nullptr); // Should produce validation error
   }
 
@@ -143,7 +147,7 @@ private:
         .usage = vk::BufferUsageFlagBits::eTransferSrc,
         .sharingMode = vk::SharingMode::eExclusive,
     };
-    vk::raii::Buffer stagingBuffer(m_DeviceHand.GetDevice(), stagingInfo);
+    vk::raii::Buffer stagingBuffer(m_DeviceHand->GetDevice(), stagingInfo);
     vk::MemoryRequirements memRequirementsStaging =
         stagingBuffer.getMemoryRequirements();
     vk::MemoryAllocateInfo memoryAllocateInfoStaging{
@@ -153,7 +157,7 @@ private:
                            vk::MemoryPropertyFlagBits::eHostVisible |
                                vk::MemoryPropertyFlagBits::eHostCoherent),
     };
-    vk::raii::DeviceMemory stagingBufferMemory(m_DeviceHand.GetDevice(),
+    vk::raii::DeviceMemory stagingBufferMemory(m_DeviceHand->GetDevice(),
                                                memoryAllocateInfoStaging);
 
     stagingBuffer.bindMemory(stagingBufferMemory, 0);
@@ -168,7 +172,7 @@ private:
         .sharingMode = vk::SharingMode::eExclusive,
     };
 
-    m_VertexBuffer = vk::raii::Buffer(m_DeviceHand.GetDevice(), bufferInfo);
+    m_VertexBuffer = vk::raii::Buffer(m_DeviceHand->GetDevice(), bufferInfo);
 
     vk::MemoryRequirements memRequirements =
         m_VertexBuffer.getMemoryRequirements();
@@ -178,7 +182,7 @@ private:
             findMemoryType(memRequirements.memoryTypeBits,
                            vk::MemoryPropertyFlagBits::eDeviceLocal)};
     m_VertexBufferMemory =
-        vk::raii::DeviceMemory(m_DeviceHand.GetDevice(), memoryAllocateInfo);
+        vk::raii::DeviceMemory(m_DeviceHand->GetDevice(), memoryAllocateInfo);
 
     m_VertexBuffer.bindMemory(*m_VertexBufferMemory, 0);
 
@@ -195,7 +199,7 @@ private:
     };
 
     vk::raii::CommandBuffer commandCopyBuffer = std::move(
-        m_DeviceHand.GetDevice().allocateCommandBuffers(allocInfo).front());
+        m_DeviceHand->GetDevice().allocateCommandBuffers(allocInfo).front());
 
     commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
         .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
@@ -204,11 +208,11 @@ private:
 
     commandCopyBuffer.end();
 
-    m_DeviceHand.GetGraphicsQueue().submit(
+    m_DeviceHand->GetGraphicsQueue().submit(
         vk::SubmitInfo{.commandBufferCount = 1,
                        .pCommandBuffers = &*commandCopyBuffer},
         nullptr);
-    m_DeviceHand.GetGraphicsQueue().waitIdle();
+    m_DeviceHand->GetGraphicsQueue().waitIdle();
   }
 
   void createSyncObjects() {
@@ -218,14 +222,14 @@ private:
 
     for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
       m_ImageAvailableSemaphores.emplace_back(
-          m_DeviceHand.GetDevice().createSemaphore({}));
+          m_DeviceHand->GetDevice().createSemaphore({}));
       m_RenderFinishedSemaphores.emplace_back(
-          m_DeviceHand.GetDevice().createSemaphore({}));
+          m_DeviceHand->GetDevice().createSemaphore({}));
 
       vk::FenceCreateInfo fenceInfo{};
       fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
       m_InFlightFences.emplace_back(
-          m_DeviceHand.GetDevice().createFence(fenceInfo));
+          m_DeviceHand->GetDevice().createFence(fenceInfo));
     }
   }
 
@@ -237,16 +241,16 @@ private:
         .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     };
     m_CommandBuffers =
-        vk::raii::CommandBuffers(m_DeviceHand.GetDevice(), allocInfo);
+        vk::raii::CommandBuffers(m_DeviceHand->GetDevice(), allocInfo);
   }
 
   void createCommandPool() {
     vk::CommandPoolCreateInfo poolInfo{
         .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = m_DeviceHand.GetGraphicsIndex(),
+        .queueFamilyIndex = m_DeviceHand->GetGraphicsIndex(),
     };
 
-    m_CommandPool = vk::raii::CommandPool(m_DeviceHand.GetDevice(), poolInfo);
+    m_CommandPool = vk::raii::CommandPool(m_DeviceHand->GetDevice(), poolInfo);
   }
 
   void createGraphicsPipeline() {
@@ -314,7 +318,7 @@ private:
         .setLayoutCount = 0, .pushConstantRangeCount = 0};
 
     m_PipelineLayout =
-        vk::raii::PipelineLayout(m_DeviceHand.GetDevice(), pipelineLayoutInfo);
+        vk::raii::PipelineLayout(m_DeviceHand->GetDevice(), pipelineLayoutInfo);
 
     vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
         .colorAttachmentCount = 1,
@@ -334,7 +338,7 @@ private:
         .renderPass = nullptr};
 
     m_GraphicsPipeline =
-        vk::raii::Pipeline(m_DeviceHand.GetDevice(), nullptr, pipelineInfo);
+        vk::raii::Pipeline(m_DeviceHand->GetDevice(), nullptr, pipelineInfo);
   }
 
   void createImageViews() {
@@ -346,19 +350,19 @@ private:
         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
     for (auto image : m_SwapChainImages) {
       imageViewCreateInfo.image = image;
-      m_SwapChainImageViews.emplace_back(m_DeviceHand.GetDevice(),
+      m_SwapChainImageViews.emplace_back(m_DeviceHand->GetDevice(),
                                          imageViewCreateInfo);
     }
   }
 
   void createSwapChain() {
     auto surfaceCapabilities =
-        m_DeviceHand.GetPhysicalDevice().getSurfaceCapabilitiesKHR(
-            *m_Window.GetSurface());
+        m_DeviceHand->GetPhysicalDevice().getSurfaceCapabilitiesKHR(
+            *m_Window->GetSurface());
 
     auto swapChainSurfaceFormat = chooseSwapSurfaceFormat(
-        m_DeviceHand.GetPhysicalDevice().getSurfaceFormatsKHR(
-            m_Window.GetSurface()));
+        m_DeviceHand->GetPhysicalDevice().getSurfaceFormatsKHR(
+            m_Window->GetSurface()));
 
     auto swapChainExtent = chooseSwapExtent(surfaceCapabilities);
 
@@ -377,7 +381,7 @@ private:
 
     vk::SwapchainCreateInfoKHR swapChainCreateInfo{
         .flags = vk::SwapchainCreateFlagsKHR(),
-        .surface = *m_Window.GetSurface(),
+        .surface = *m_Window->GetSurface(),
         .minImageCount = minImageCount,
         .imageFormat = swapChainSurfaceFormat.format,
         .imageColorSpace = swapChainSurfaceFormat.colorSpace,
@@ -388,13 +392,13 @@ private:
         .preTransform = surfaceCapabilities.currentTransform,
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
         .presentMode = chooseSwapPresentMode(
-            m_DeviceHand.GetPhysicalDevice().getSurfacePresentModesKHR(
-                *m_Window.GetSurface())),
+            m_DeviceHand->GetPhysicalDevice().getSurfacePresentModesKHR(
+                *m_Window->GetSurface())),
         .clipped = true,
         .oldSwapchain = nullptr,
     };
     m_SwapChain =
-        vk::raii::SwapchainKHR(m_DeviceHand.GetDevice(), swapChainCreateInfo);
+        vk::raii::SwapchainKHR(m_DeviceHand->GetDevice(), swapChainCreateInfo);
     m_SwapChainImages = m_SwapChain.getImages();
 
     m_SwapChainImageFormat = swapChainSurfaceFormat.format;
@@ -430,7 +434,7 @@ private:
       return capabilities.currentExtent;
     }
     int width, height;
-    glfwGetFramebufferSize(m_Window.GetWindow(), &width, &height);
+    glfwGetFramebufferSize(m_Window->GetWindow(), &width, &height);
 
     return {
         std::clamp<uint32_t>(width, capabilities.minImageExtent.width,
@@ -441,16 +445,16 @@ private:
   }
 
   void mainLoop() {
-    while (!glfwWindowShouldClose(m_Window.GetWindow())) {
+    while (!glfwWindowShouldClose(m_Window->GetWindow())) {
       glfwPollEvents();
       drawFrame();
     }
-    m_DeviceHand.GetDevice().waitIdle();
+    m_DeviceHand->GetDevice().waitIdle();
   }
 
   void drawFrame() {
     while (vk::Result::eTimeout ==
-           m_DeviceHand.GetDevice().waitForFences(
+           m_DeviceHand->GetDevice().waitForFences(
                *m_InFlightFences[m_CurrentFrame], vk::True, UINT64_MAX))
       ;
 
@@ -472,7 +476,7 @@ private:
       throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    m_DeviceHand.GetDevice().resetFences(*m_InFlightFences[m_CurrentFrame]);
+    m_DeviceHand->GetDevice().resetFences(*m_InFlightFences[m_CurrentFrame]);
 
     m_CommandBuffers[m_CurrentFrame].reset();
     recordCommandBuffer(imageIndex);
@@ -493,8 +497,8 @@ private:
                                                       // INDEX
     };
 
-    m_DeviceHand.GetGraphicsQueue().submit(submitInfo,
-                                           *m_InFlightFences[m_CurrentFrame]);
+    m_DeviceHand->GetGraphicsQueue().submit(submitInfo,
+                                            *m_InFlightFences[m_CurrentFrame]);
 
     // Present the rendered image
     const vk::PresentInfoKHR presentInfoKHR{
@@ -507,7 +511,7 @@ private:
         .pImageIndices = &imageIndex,
     };
 
-    result = m_DeviceHand.GetPresentQueue().presentKHR(presentInfoKHR);
+    result = m_DeviceHand->GetPresentQueue().presentKHR(presentInfoKHR);
 
     switch (result) {
     case vk::Result::eSuccess:
@@ -531,7 +535,7 @@ private:
 
   void cleanup() {
 
-    m_DeviceHand.GetDevice().waitIdle();
+    m_DeviceHand->GetDevice().waitIdle();
 
     m_IndexBufferMemory.clear();
     m_IndexBuffer.clear();
@@ -669,7 +673,7 @@ private:
   uint32_t findQueueFamilies(VkPhysicalDevice device) {
     // find the index of the first queue family that supports graphics
     std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
-        m_DeviceHand.GetPhysicalDevice().getQueueFamilyProperties();
+        m_DeviceHand->GetPhysicalDevice().getQueueFamilyProperties();
 
     // get the first index into queueFamilyProperties which supports graphics
     auto graphicsQueueFamilyProperty =
@@ -712,13 +716,13 @@ private:
   void recreateSwapChain() {
     // std::cout << "Recreating the swapchain" << std::endl;
     int width = 0, height = 0;
-    glfwGetFramebufferSize(m_Window.GetWindow(), &width, &height);
+    glfwGetFramebufferSize(m_Window->GetWindow(), &width, &height);
     while (width == 0 || height == 0) {
-      glfwGetFramebufferSize(m_Window.GetWindow(), &width, &height);
+      glfwGetFramebufferSize(m_Window->GetWindow(), &width, &height);
       glfwWaitEvents();
     }
 
-    m_DeviceHand.GetDevice().waitIdle();
+    m_DeviceHand->GetDevice().waitIdle();
 
     cleanupSwapChain();
     createSwapChain();
@@ -730,7 +734,7 @@ private:
     vk::ShaderModuleCreateInfo createInfo{
         .codeSize = code.size() * sizeof(char),
         .pCode = reinterpret_cast<const uint32_t *>(code.data())};
-    vk::raii::ShaderModule shaderModule{m_DeviceHand.GetDevice(), createInfo};
+    vk::raii::ShaderModule shaderModule{m_DeviceHand->GetDevice(), createInfo};
 
     return shaderModule;
   }
@@ -745,7 +749,7 @@ private:
   uint32_t findMemoryType(uint32_t typeFilter,
                           vk::MemoryPropertyFlags properties) {
     vk::PhysicalDeviceMemoryProperties memProperties =
-        m_DeviceHand.GetPhysicalDevice().getMemoryProperties();
+        m_DeviceHand->GetPhysicalDevice().getMemoryProperties();
 
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
       if ((typeFilter & (1 << i)) &&
@@ -767,7 +771,7 @@ private:
         .usage = usage,
         .sharingMode = vk::SharingMode::eExclusive,
     };
-    buffer = vk::raii::Buffer(m_DeviceHand.GetDevice(), bufferInfo);
+    buffer = vk::raii::Buffer(m_DeviceHand->GetDevice(), bufferInfo);
 
     vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
 
@@ -777,15 +781,15 @@ private:
             findMemoryType(memRequirements.memoryTypeBits, properties),
     };
 
-    bufferMemory = vk::raii::DeviceMemory(m_DeviceHand.GetDevice(), allocInfo);
+    bufferMemory = vk::raii::DeviceMemory(m_DeviceHand->GetDevice(), allocInfo);
 
     buffer.bindMemory(*bufferMemory, 0);
   }
 
 private:
-  Renderer::Instance m_Instance;
-  Renderer::Window m_Window;
-  Renderer::Device m_DeviceHand;
+  std::unique_ptr<Renderer::Instance> m_Instance;
+  std::unique_ptr<Renderer::Window> m_Window;
+  std::unique_ptr<Renderer::Device> m_DeviceHand;
 
   vk::Format m_SwapChainImageFormat = vk::Format::eUndefined;
   vk::Extent2D m_SwapChainExtent;

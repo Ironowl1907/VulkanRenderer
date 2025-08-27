@@ -2,14 +2,12 @@
 
 namespace Renderer {
 
-Device::Device() {}
-Device::~Device() {}
-
-void Device::Create(Renderer::Instance &instance,
-                    const vk::SurfaceKHR &surface) {
+Device::Device(Renderer::Instance &instance, const vk::SurfaceKHR &surface) {
   PickPhysicalDevice(instance);
   CreateLogicalDevice(surface);
 }
+
+Device::~Device() {}
 
 void Device::PickPhysicalDevice(Renderer::Instance &instance) {
   auto devices = instance.GetRaii().enumeratePhysicalDevices();

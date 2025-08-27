@@ -6,10 +6,8 @@
 namespace Renderer {
 class Instance {
 public:
-  Instance();
+  Instance(const char *appName);
   ~Instance();
-
-  void Create(const char *appName);
 
   vk::Instance Get() { return *m_Handler; }
   vk::raii::Instance &GetRaii() { return m_Handler; }

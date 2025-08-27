@@ -8,10 +8,8 @@ namespace Renderer {
 
 class Device {
 public:
-  Device();
+  Device(Renderer::Instance &instance, const vk::SurfaceKHR &surface);
   ~Device();
-
-  void Create(Renderer::Instance &instance, const vk::SurfaceKHR &surface);
 
   vk::raii::PhysicalDevice &GetPhysicalDevice() { return m_PhysicalDevice; }
   vk::raii::Device &GetDevice() { return m_Device; }

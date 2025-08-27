@@ -3,21 +3,10 @@
 
 namespace Renderer {
 
-Window::Window() {}
-Window::~Window() {}
+Window::Window(uint32_t width, uint32_t height,
+               void (*resizeCallback)(GLFWwindow *window, int width,
+                                      int height)) {
 
-void Window::CreateSurface(Renderer::Instance &instance) {
-  VkSurfaceKHR _surface;
-  if (glfwCreateWindowSurface(instance.Get(), m_Window, nullptr, &_surface) !=
-      0) {
-    throw std::runtime_error("failed to create window surface!");
-  }
-  m_Surface = vk::raii::SurfaceKHR(instance.GetRaii(), _surface);
-}
-
-void Window::InitWindow(uint32_t width, uint32_t height,
-                        void (*resizeCallback)(GLFWwindow *window, int width,
-                                               int height)) {
   glfwInit();
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -28,13 +17,15 @@ void Window::InitWindow(uint32_t width, uint32_t height,
   glfwSetFramebufferSizeCallback(m_Window, resizeCallback);
 }
 
-[[deprecated("Hey! don't use this")]]
-void Window::Create(uint32_t width, uint32_t height,
-                    void (*resizeCallback)(GLFWwindow *window, int width,
-                                           int height),
-                    Renderer::Instance &instance) {
-  InitWindow(width, height, resizeCallback);
-  CreateSurface(instance);
+Window::~Window() {}
+
+void Window::CreateSurface(Renderer::Instance &instance) {
+  VkSurfaceKHR _surface;
+  if (glfwCreateWindowSurface(instance.Get(), m_Window, nullptr, &_surface) !=
+      0) {
+    throw std::runtime_error("failed to create window surface!");
+  }
+  m_Surface = vk::raii::SurfaceKHR(instance.GetRaii(), _surface);
 }
 
 void Window::Clean() {
