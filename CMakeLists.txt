@@ -9,6 +9,8 @@ add_executable(Renderer main.cpp
   ./src/Renderer/Window/Window.cpp
   ./src/Renderer/Swapchain/Swapchain.cpp
   ./src/Renderer/Pipeline/Pipeline.cpp
+  ./src/Renderer/Command/CommandBuffer.cpp
+  ./src/Renderer/Command/CommandPool.cpp
 )
 
 add_custom_target(run

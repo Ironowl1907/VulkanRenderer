@@ -17,6 +17,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "src/Renderer/Command/CommandBuffer.h"
+#include "src/Renderer/Command/CommandPool.h"
 #include "src/Renderer/Device/Device.h"
 #include "src/Renderer/Instance/Instance.h"
 #include "src/Renderer/Pipeline/Pipeline.h"
@@ -110,10 +112,12 @@ private:
 
     m_GraphicsPipeline =
         std::make_unique<Renderer::Pipeline>(*m_DeviceHand, *m_SwapChain);
-    createCommandPool();
+
+    m_CommandPool = std::make_unique<Renderer::CommandPool>(m_DeviceHand);
     createVertexBuffer();
     createIndexBuffer();
-    createCommandBuffers();
+    // createCommandBuffers();
+    m_CommandBuffer = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
     createSyncObjects();
 
     // This should trigger a validation error
@@ -237,26 +241,6 @@ private:
       m_InFlightFences.emplace_back(
           m_DeviceHand->GetDevice().createFence(fenceInfo));
     }
-  }
-
-  void createCommandBuffers() {
-    m_CommandBuffers.clear();
-    vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = m_CommandPool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
-    };
-    m_CommandBuffers =
-        vk::raii::CommandBuffers(m_DeviceHand->GetDevice(), allocInfo);
-  }
-
-  void createCommandPool() {
-    vk::CommandPoolCreateInfo poolInfo{
-        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = m_DeviceHand->GetGraphicsIndex(),
-    };
-
-    m_CommandPool = vk::raii::CommandPool(m_DeviceHand->GetDevice(), poolInfo);
   }
 
   void mainLoop() {
@@ -573,8 +557,8 @@ private:
   std::unique_ptr<Renderer::Swapchain> m_SwapChain;
   std::unique_ptr<Renderer::Pipeline> m_GraphicsPipeline;
 
-  vk::raii::CommandPool m_CommandPool = nullptr;
-  std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
+  std::unique_ptr<Renderer::CommandPool> m_CommandPool;
+  std::unique_ptr<Renderer::CommandBuffer> m_CommandBuffer;
 
   // Syncronization primitives
   std::vector<vk::raii::Semaphore> m_ImageAvailableSemaphores;
