@@ -8,8 +8,7 @@ add_executable(Renderer main.cpp
   ./src/Renderer/Device/Device.cpp
   ./src/Renderer/Window/Window.cpp
   ./src/Renderer/Swapchain/Swapchain.cpp
-
-
+  ./src/Renderer/Pipeline/Pipeline.cpp
 )
 
 add_custom_target(run

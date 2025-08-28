@@ -19,6 +19,7 @@
 
 #include "src/Renderer/Device/Device.h"
 #include "src/Renderer/Instance/Instance.h"
+#include "src/Renderer/Pipeline/Pipeline.h"
 #include "src/Renderer/Swapchain/Swapchain.h"
 #include "src/Renderer/Window/Window.h"
 
@@ -107,7 +108,8 @@ private:
         std::make_unique<Renderer::Swapchain>(*m_DeviceHand, *m_Window);
     m_SwapChain->CreateImageViews(*m_DeviceHand);
 
-    createGraphicsPipeline();
+    m_GraphicsPipeline =
+        std::make_unique<Renderer::Pipeline>(*m_DeviceHand, *m_SwapChain);
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
@@ -118,95 +120,6 @@ private:
     VkBuffer invalidBuffer = VK_NULL_HANDLE;
     vkDestroyBuffer(*m_DeviceHand->GetDevice(), invalidBuffer,
                     nullptr); // Should produce validation error
-  }
-
-  void createGraphicsPipeline() {
-    vk::raii::ShaderModule shaderModule =
-        createShaderModule(readFile("shaders/slang.spv"));
-
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
-        .stage = vk::ShaderStageFlagBits::eVertex,
-        .module = shaderModule,
-        .pName = "vertMain"};
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
-        .stage = vk::ShaderStageFlagBits::eFragment,
-        .module = shaderModule,
-        .pName = "fragMain"};
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
-                                                        fragShaderStageInfo};
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions();
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-
-    vertexInputInfo.vertexAttributeDescriptionCount = 2;
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-        .topology = vk::PrimitiveTopology::eTriangleList};
-    vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1,
-                                                      .scissorCount = 1};
-
-    vk::PipelineRasterizationStateCreateInfo rasterizer{
-        .depthClampEnable = vk::False,
-        .rasterizerDiscardEnable = vk::False,
-        .polygonMode = vk::PolygonMode::eFill,
-        .cullMode = vk::CullModeFlagBits::eBack,
-        .frontFace = vk::FrontFace::eClockwise,
-        .depthBiasEnable = vk::False,
-        .depthBiasSlopeFactor = 1.0f,
-        .lineWidth = 1.0f};
-
-    vk::PipelineMultisampleStateCreateInfo multisampling{
-        .rasterizationSamples = vk::SampleCountFlagBits::e1,
-        .sampleShadingEnable = vk::False};
-
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-        .blendEnable = vk::False,
-        .colorWriteMask =
-            vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
-
-    vk::PipelineColorBlendStateCreateInfo colorBlending{
-        .logicOpEnable = vk::False,
-        .logicOp = vk::LogicOp::eCopy,
-        .attachmentCount = 1,
-        .pAttachments = &colorBlendAttachment};
-
-    std::vector dynamicStates = {vk::DynamicState::eViewport,
-                                 vk::DynamicState::eScissor};
-    vk::PipelineDynamicStateCreateInfo dynamicState{
-        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-        .pDynamicStates = dynamicStates.data()};
-
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
-        .setLayoutCount = 0, .pushConstantRangeCount = 0};
-
-    m_PipelineLayout =
-        vk::raii::PipelineLayout(m_DeviceHand->GetDevice(), pipelineLayoutInfo);
-
-    vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &m_SwapChain->GetFormat(),
-    };
-    vk::GraphicsPipelineCreateInfo pipelineInfo{
-        .pNext = &pipelineRenderingCreateInfo,
-        .stageCount = 2,
-        .pStages = shaderStages,
-        .pVertexInputState = &vertexInputInfo,
-        .pInputAssemblyState = &inputAssembly,
-        .pViewportState = &viewportState,
-        .pRasterizationState = &rasterizer,
-        .pMultisampleState = &multisampling,
-        .pColorBlendState = &colorBlending,
-        .pDynamicState = &dynamicState,
-        .layout = m_PipelineLayout,
-        .renderPass = nullptr};
-
-    m_GraphicsPipeline =
-        vk::raii::Pipeline(m_DeviceHand->GetDevice(), nullptr, pipelineInfo);
   }
 
   void createIndexBuffer() {
@@ -454,8 +367,6 @@ private:
       a.clear();
 
     m_CommandPool.clear();
-    m_GraphicsPipeline.clear();
-    m_PipelineLayout.clear();
     m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
   }
 
@@ -517,7 +428,7 @@ private:
     m_CommandBuffers[m_CurrentFrame].setScissor(0, scissor);
 
     m_CommandBuffers[m_CurrentFrame].bindPipeline(
-        vk::PipelineBindPoint::eGraphics, *m_GraphicsPipeline);
+        vk::PipelineBindPoint::eGraphics, *m_GraphicsPipeline->Get());
 
     m_CommandBuffers[m_CurrentFrame].bindVertexBuffers(0, *m_VertexBuffer, {0});
     m_CommandBuffers[m_CurrentFrame].bindIndexBuffer(m_IndexBuffer, 0,
@@ -608,16 +519,6 @@ private:
     return buffer;
   }
 
-  [[nodiscard]] vk::raii::ShaderModule
-  createShaderModule(const std::vector<char> &code) {
-    vk::ShaderModuleCreateInfo createInfo{
-        .codeSize = code.size() * sizeof(char),
-        .pCode = reinterpret_cast<const uint32_t *>(code.data())};
-    vk::raii::ShaderModule shaderModule{m_DeviceHand->GetDevice(), createInfo};
-
-    return shaderModule;
-  }
-
   static void framebufferResizeCallback(GLFWwindow *window, int width,
                                         int height) {
     auto app = reinterpret_cast<HelloTriangleApplication *>(
@@ -670,10 +571,7 @@ private:
   std::unique_ptr<Renderer::Window> m_Window;
   std::unique_ptr<Renderer::Device> m_DeviceHand;
   std::unique_ptr<Renderer::Swapchain> m_SwapChain;
-
-  vk::raii::PipelineLayout m_PipelineLayout = nullptr;
-
-  vk::raii::Pipeline m_GraphicsPipeline = nullptr;
+  std::unique_ptr<Renderer::Pipeline> m_GraphicsPipeline;
 
   vk::raii::CommandPool m_CommandPool = nullptr;
   std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
