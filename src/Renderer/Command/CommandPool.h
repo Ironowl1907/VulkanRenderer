@@ -14,9 +14,9 @@ public:
   CommandPool &operator=(const CommandPool &) = delete;
   CommandPool(CommandPool &&) = default;
 
-  std::unique_ptr<CommandBuffer> allocatePrimary(uint32_t maxFramesInFlight);
+  std::unique_ptr<CommandBuffer> allocatePrimary();
   std::vector<std::unique_ptr<CommandBuffer>>
-  allocatePrimary(uint32_t count, uint32_t maxFramesInFlight);
+  allocatePrimary(uint32_t maxFramesInFlight);
   std::unique_ptr<CommandBuffer> allocateSecondary();
 
   // Pool management

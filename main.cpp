@@ -9,7 +9,6 @@
 #include <stdexcept>
 
 #include <glm/glm.hpp>
-#include <vulkan/vulkan_core.h>
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
@@ -113,11 +112,13 @@ private:
     m_GraphicsPipeline =
         std::make_unique<Renderer::Pipeline>(*m_DeviceHand, *m_SwapChain);
 
-    m_CommandPool = std::make_unique<Renderer::CommandPool>(m_DeviceHand);
+    m_CommandPool = std::make_unique<Renderer::CommandPool>(
+        *m_DeviceHand,
+        vk::CommandPoolCreateFlags::BitsType::eResetCommandBuffer);
+
     createVertexBuffer();
     createIndexBuffer();
-    // createCommandBuffers();
-    m_CommandBuffer = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
+    m_CommandBuffers = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
     createSyncObjects();
 
     // This should trigger a validation error
@@ -203,7 +204,7 @@ private:
                   vk::DeviceSize size) {
 
     vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = m_CommandPool,
+        .commandPool = *m_CommandPool->Get(),
         .level = vk::CommandBufferLevel::ePrimary,
         .commandBufferCount = 1,
     };
@@ -258,10 +259,7 @@ private:
       ;
 
     auto [result, imageIndex] = m_SwapChain->Get().acquireNextImage(
-        UINT64_MAX,
-        m_ImageAvailableSemaphores[m_CurrentFrame], // Use frame-based
-                                                    // semaphore for acquire
-        nullptr);
+        UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], nullptr);
 
     if (result == vk::Result::eErrorOutOfDateKHR ||
         result == vk::Result::eSuboptimalKHR) {
@@ -277,7 +275,7 @@ private:
 
     m_DeviceHand->GetDevice().resetFences(*m_InFlightFences[m_CurrentFrame]);
 
-    m_CommandBuffers[m_CurrentFrame].reset();
+    m_CommandBuffers[m_CurrentFrame]->reset();
     recordCommandBuffer(imageIndex);
 
     vk::PipelineStageFlags waitDestinationStageMask(
@@ -289,7 +287,7 @@ private:
             &*m_ImageAvailableSemaphores[m_CurrentFrame], // Wait for acquire
         .pWaitDstStageMask = &waitDestinationStageMask,
         .commandBufferCount = 1,
-        .pCommandBuffers = &*m_CommandBuffers[m_CurrentFrame],
+        .pCommandBuffers = &*(m_CommandBuffers[m_CurrentFrame]->get()),
         .signalSemaphoreCount = 1,
         .pSignalSemaphores =
             &*m_RenderFinishedSemaphores[imageIndex], // Signal based on IMAGE
@@ -347,10 +345,7 @@ private:
       a.clear();
     for (auto &a : m_InFlightFences)
       a.clear();
-    for (auto &a : m_CommandBuffers)
-      a.clear();
 
-    m_CommandPool.clear();
     m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
   }
 
@@ -365,7 +360,7 @@ private:
   }
 
   void recordCommandBuffer(uint32_t imageIndex) {
-    m_CommandBuffers[m_CurrentFrame].begin({});
+    m_CommandBuffers[m_CurrentFrame]->get().begin({});
     transition_image_layout(
         imageIndex, vk::ImageLayout::eUndefined,
         vk::ImageLayout::eColorAttachmentOptimal,
@@ -392,7 +387,7 @@ private:
         .pColorAttachments = &attachmentInfo};
 
     // Start Rendering
-    m_CommandBuffers[m_CurrentFrame].beginRendering(renderingInfo);
+    m_CommandBuffers[m_CurrentFrame]->get().beginRendering(renderingInfo);
 
     vk::Viewport viewport{
         .x = 0.0f,
@@ -408,19 +403,21 @@ private:
         .extent = m_SwapChain->GetExtend2D(),
     };
 
-    m_CommandBuffers[m_CurrentFrame].setViewport(0, viewport);
-    m_CommandBuffers[m_CurrentFrame].setScissor(0, scissor);
+    m_CommandBuffers[m_CurrentFrame]->get().setViewport(0, viewport);
+    m_CommandBuffers[m_CurrentFrame]->get().setScissor(0, scissor);
 
-    m_CommandBuffers[m_CurrentFrame].bindPipeline(
+    m_CommandBuffers[m_CurrentFrame]->get().bindPipeline(
         vk::PipelineBindPoint::eGraphics, *m_GraphicsPipeline->Get());
 
-    m_CommandBuffers[m_CurrentFrame].bindVertexBuffers(0, *m_VertexBuffer, {0});
-    m_CommandBuffers[m_CurrentFrame].bindIndexBuffer(m_IndexBuffer, 0,
-                                                     vk::IndexType::eUint16);
+    m_CommandBuffers[m_CurrentFrame]->get().bindVertexBuffers(
+        0, *m_VertexBuffer, {0});
+    m_CommandBuffers[m_CurrentFrame]->get().bindIndexBuffer(
+        m_IndexBuffer, 0, vk::IndexType::eUint16);
 
-    m_CommandBuffers[m_CurrentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
+    m_CommandBuffers[m_CurrentFrame]->get().drawIndexed(indices.size(), 1, 0, 0,
+                                                        0);
 
-    m_CommandBuffers[m_CurrentFrame].endRendering();
+    m_CommandBuffers[m_CurrentFrame]->get().endRendering();
 
     transition_image_layout(
         imageIndex, vk::ImageLayout::eColorAttachmentOptimal,
@@ -431,7 +428,7 @@ private:
         vk::PipelineStageFlagBits2::eBottomOfPipe           // dstStage
     );
 
-    m_CommandBuffers[m_CurrentFrame].end();
+    m_CommandBuffers[m_CurrentFrame]->get().end();
   }
 
   void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout,
@@ -464,7 +461,7 @@ private:
         .imageMemoryBarrierCount = 1,
         .pImageMemoryBarriers = &barrier,
     };
-    m_CommandBuffers[m_CurrentFrame].pipelineBarrier2(dependencyInfo);
+    m_CommandBuffers[m_CurrentFrame]->get().pipelineBarrier2(dependencyInfo);
   }
 
   uint32_t findQueueFamilies(VkPhysicalDevice device) {
@@ -558,7 +555,7 @@ private:
   std::unique_ptr<Renderer::Pipeline> m_GraphicsPipeline;
 
   std::unique_ptr<Renderer::CommandPool> m_CommandPool;
-  std::unique_ptr<Renderer::CommandBuffer> m_CommandBuffer;
+  std::vector<std::unique_ptr<Renderer::CommandBuffer>> m_CommandBuffers;
 
   // Syncronization primitives
   std::vector<vk::raii::Semaphore> m_ImageAvailableSemaphores;

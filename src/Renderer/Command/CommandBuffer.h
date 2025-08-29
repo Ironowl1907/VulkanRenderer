@@ -46,7 +46,7 @@ public:
   vk::CommandBuffer getHandle() const { return *commandBuffer_; }
 
 private:
-  friend class CommandPool; // Only CommandPool can construct
+  friend class CommandPool; // For constuction
   CommandBuffer(vk::raii::CommandBuffer &&commandBuffer);
 
   vk::raii::CommandBuffer commandBuffer_;
