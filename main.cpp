@@ -120,11 +120,6 @@ private:
     createIndexBuffer();
     m_CommandBuffers = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
     createSyncObjects();
-
-    // This should trigger a validation error
-    VkBuffer invalidBuffer = VK_NULL_HANDLE;
-    vkDestroyBuffer(*m_DeviceHand->GetDevice(), invalidBuffer,
-                    nullptr); // Should produce validation error
   }
 
   void createIndexBuffer() {
