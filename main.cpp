@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <limits>
 #include <memory>
 #include <stdexcept>
 
@@ -16,6 +15,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "src/Renderer/Buffer/Buffer.h"
 #include "src/Renderer/Command/CommandBuffer.h"
 #include "src/Renderer/Command/CommandPool.h"
 #include "src/Renderer/Device/Device.h"
@@ -116,6 +116,7 @@ private:
         *m_DeviceHand,
         vk::CommandPoolCreateFlags::BitsType::eResetCommandBuffer);
 
+    m_BufferManager = std::make_unique<Renderer::BufferManager>();
     createVertexBuffer();
     createIndexBuffer();
     m_CommandBuffers = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
@@ -127,98 +128,49 @@ private:
 
     vk::raii::Buffer stagingBuffer({});
     vk::raii::DeviceMemory stagingBufferMemory({});
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible |
-                     vk::MemoryPropertyFlagBits::eHostCoherent,
-                 stagingBuffer, stagingBufferMemory);
+    m_BufferManager->CreateBuffer(*m_DeviceHand, bufferSize,
+                                  vk::BufferUsageFlagBits::eTransferSrc,
+                                  vk::MemoryPropertyFlagBits::eHostVisible |
+                                      vk::MemoryPropertyFlagBits::eHostCoherent,
+                                  stagingBuffer, stagingBufferMemory);
 
     void *data = stagingBufferMemory.mapMemory(0, bufferSize);
     memcpy(data, indices.data(), (size_t)bufferSize);
     stagingBufferMemory.unmapMemory();
 
-    createBuffer(bufferSize,
-                 vk::BufferUsageFlagBits::eTransferDst |
-                     vk::BufferUsageFlagBits::eIndexBuffer,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal, m_IndexBuffer,
-                 m_IndexBufferMemory);
+    m_BufferManager->CreateBuffer(*m_DeviceHand, bufferSize,
+                                  vk::BufferUsageFlagBits::eTransferDst |
+                                      vk::BufferUsageFlagBits::eIndexBuffer,
+                                  vk::MemoryPropertyFlagBits::eDeviceLocal,
+                                  m_IndexBuffer, m_IndexBufferMemory);
 
-    copyBuffer(stagingBuffer, m_IndexBuffer, bufferSize);
+    m_BufferManager->CopyBuffer(*m_DeviceHand, *m_CommandPool, stagingBuffer,
+                                m_IndexBuffer, bufferSize);
   }
 
   void createVertexBuffer() {
     vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    vk::BufferCreateInfo stagingInfo{
-        .size = bufferSize,
-        .usage = vk::BufferUsageFlagBits::eTransferSrc,
-        .sharingMode = vk::SharingMode::eExclusive,
-    };
-    vk::raii::Buffer stagingBuffer(m_DeviceHand->GetDevice(), stagingInfo);
-    vk::MemoryRequirements memRequirementsStaging =
-        stagingBuffer.getMemoryRequirements();
-    vk::MemoryAllocateInfo memoryAllocateInfoStaging{
-        .allocationSize = memRequirementsStaging.size,
-        .memoryTypeIndex =
-            findMemoryType(memRequirementsStaging.memoryTypeBits,
-                           vk::MemoryPropertyFlagBits::eHostVisible |
-                               vk::MemoryPropertyFlagBits::eHostCoherent),
-    };
-    vk::raii::DeviceMemory stagingBufferMemory(m_DeviceHand->GetDevice(),
-                                               memoryAllocateInfoStaging);
+    vk::raii::Buffer stagingBuffer({});
+    vk::raii::DeviceMemory stagingBufferMemory({});
+    m_BufferManager->CreateBuffer(*m_DeviceHand, bufferSize,
+                                  vk::BufferUsageFlagBits::eTransferSrc,
+                                  vk::MemoryPropertyFlagBits::eHostVisible |
+                                      vk::MemoryPropertyFlagBits::eHostCoherent,
+                                  stagingBuffer, stagingBufferMemory);
 
-    stagingBuffer.bindMemory(stagingBufferMemory, 0);
-    void *dataStaging = stagingBufferMemory.mapMemory(0, stagingInfo.size);
-    memcpy(dataStaging, vertices.data(), stagingInfo.size);
+    void *data = stagingBufferMemory.mapMemory(0, bufferSize);
+    memcpy(data, vertices.data(), (size_t)bufferSize);
     stagingBufferMemory.unmapMemory();
 
-    vk::BufferCreateInfo bufferInfo{
-        .size = bufferSize,
-        .usage = vk::BufferUsageFlagBits::eVertexBuffer |
-                 vk::BufferUsageFlagBits::eTransferDst,
-        .sharingMode = vk::SharingMode::eExclusive,
-    };
+    m_BufferManager->CreateBuffer(*m_DeviceHand, bufferSize,
+                                  vk::BufferUsageFlagBits::eTransferDst |
+                                      vk::BufferUsageFlagBits::eVertexBuffer,
+                                  vk::MemoryPropertyFlagBits::eDeviceLocal,
+                                  m_VertexBuffer, m_VertexBufferMemory);
 
-    m_VertexBuffer = vk::raii::Buffer(m_DeviceHand->GetDevice(), bufferInfo);
-
-    vk::MemoryRequirements memRequirements =
-        m_VertexBuffer.getMemoryRequirements();
-    vk::MemoryAllocateInfo memoryAllocateInfo{
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex =
-            findMemoryType(memRequirements.memoryTypeBits,
-                           vk::MemoryPropertyFlagBits::eDeviceLocal)};
-    m_VertexBufferMemory =
-        vk::raii::DeviceMemory(m_DeviceHand->GetDevice(), memoryAllocateInfo);
-
-    m_VertexBuffer.bindMemory(*m_VertexBufferMemory, 0);
-
-    copyBuffer(stagingBuffer, m_VertexBuffer, stagingInfo.size);
-  }
-
-  void copyBuffer(vk::raii::Buffer &srcBuffer, vk::raii::Buffer &dstBuffer,
-                  vk::DeviceSize size) {
-
-    vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = *m_CommandPool->Get(),
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1,
-    };
-
-    vk::raii::CommandBuffer commandCopyBuffer = std::move(
-        m_DeviceHand->GetDevice().allocateCommandBuffers(allocInfo).front());
-
-    commandCopyBuffer.begin(vk::CommandBufferBeginInfo{
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer,
-                                 vk::BufferCopy{0, 0, size});
-
-    commandCopyBuffer.end();
-
-    m_DeviceHand->GetGraphicsQueue().submit(
-        vk::SubmitInfo{.commandBufferCount = 1,
-                       .pCommandBuffers = &*commandCopyBuffer},
-        nullptr);
-    m_DeviceHand->GetGraphicsQueue().waitIdle();
+    m_BufferManager->CopyBuffer(*m_DeviceHand, *m_CommandPool, stagingBuffer,
+                                m_VertexBuffer, bufferSize);
   }
 
   void createSyncObjects() {
@@ -502,52 +454,13 @@ private:
     app->m_FramebufferResized = true;
   }
 
-  uint32_t findMemoryType(uint32_t typeFilter,
-                          vk::MemoryPropertyFlags properties) {
-    vk::PhysicalDeviceMemoryProperties memProperties =
-        m_DeviceHand->GetPhysicalDevice().getMemoryProperties();
-
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-      if ((typeFilter & (1 << i)) &&
-          (memProperties.memoryTypes[i].propertyFlags & properties) ==
-              properties) {
-        return i;
-      }
-    }
-
-    throw std::runtime_error("failed to find suitable memory type!");
-  }
-
-  void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
-                    vk::MemoryPropertyFlags properties,
-                    vk::raii::Buffer &buffer,
-                    vk::raii::DeviceMemory &bufferMemory) {
-    vk::BufferCreateInfo bufferInfo{
-        .size = size,
-        .usage = usage,
-        .sharingMode = vk::SharingMode::eExclusive,
-    };
-    buffer = vk::raii::Buffer(m_DeviceHand->GetDevice(), bufferInfo);
-
-    vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
-
-    vk::MemoryAllocateInfo allocInfo{
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex =
-            findMemoryType(memRequirements.memoryTypeBits, properties),
-    };
-
-    bufferMemory = vk::raii::DeviceMemory(m_DeviceHand->GetDevice(), allocInfo);
-
-    buffer.bindMemory(*bufferMemory, 0);
-  }
-
 private:
   std::unique_ptr<Renderer::Instance> m_Instance;
   std::unique_ptr<Renderer::Window> m_Window;
   std::unique_ptr<Renderer::Device> m_DeviceHand;
   std::unique_ptr<Renderer::Swapchain> m_SwapChain;
   std::unique_ptr<Renderer::Pipeline> m_GraphicsPipeline;
+  std::unique_ptr<Renderer::BufferManager> m_BufferManager;
 
   std::unique_ptr<Renderer::CommandPool> m_CommandPool;
   std::vector<std::unique_ptr<Renderer::CommandBuffer>> m_CommandBuffers;

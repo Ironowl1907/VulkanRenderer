@@ -11,6 +11,7 @@ add_executable(Renderer main.cpp
   ./src/Renderer/Pipeline/Pipeline.cpp
   ./src/Renderer/Command/CommandBuffer.cpp
   ./src/Renderer/Command/CommandPool.cpp
+  ./src/Renderer/Buffer/Buffer.cpp
 )
 
 add_custom_target(run
@@ -18,6 +19,8 @@ add_custom_target(run
     DEPENDS Renderer
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
 )
+
+target_compile_options(Renderer PRIVATE -Wall -Wextra)
 
 target_link_libraries(Renderer
     glfw
