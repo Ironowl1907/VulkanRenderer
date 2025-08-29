@@ -73,24 +73,9 @@ const std::vector<uint16_t> indices = {
     0, 1, 2, 2, 3, 0,
 };
 
-std::vector<const char *> getRequiredExtensions() {
-  uint32_t glfwExtensionCount = 0;
-  auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-  std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-  if (enableValidationLayers) {
-    extensions.push_back(vk::EXTDebugUtilsExtensionName);
-  }
-
-  return extensions;
-}
-
 class HelloTriangleApplication {
 public:
   void run() {
-    std::cout << "Using debug validation layers: "
-              << ((enableValidationLayers) ? "YES" : "NO") << '\n';
-
     m_Window = std::make_unique<Renderer::Window>(WIDTH, HEIGHT,
                                                   framebufferResizeCallback);
     initVulkan();
@@ -292,8 +277,6 @@ private:
       a.clear();
     for (auto &a : m_InFlightFences)
       a.clear();
-
-    m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
   }
 
   static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
