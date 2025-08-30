@@ -105,9 +105,6 @@ private:
         std::make_unique<Renderer::Swapchain>(*m_DeviceHand, *m_Window);
     m_SwapChain->CreateImageViews(*m_DeviceHand);
 
-    m_GraphicsPipeline =
-        std::make_unique<Renderer::Pipeline>(*m_DeviceHand, *m_SwapChain);
-
     m_CommandPool = std::make_unique<Renderer::CommandPool>(
         *m_DeviceHand,
         vk::CommandPoolCreateFlags::BitsType::eResetCommandBuffer);
@@ -116,6 +113,11 @@ private:
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
+
+    m_GraphicsPipeline = std::make_unique<Renderer::Pipeline>(
+        *m_DeviceHand, *m_SwapChain, MAX_FRAMES_IN_FLIGHT, m_UniformBuffers,
+        sizeof(UniformBufferObject));
+
     m_CommandBuffers = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
     createSyncObjects();
   }
@@ -402,6 +404,10 @@ private:
         0, *m_VertexBuffer, {0});
     m_CommandBuffers[m_CurrentFrame]->get().bindIndexBuffer(
         m_IndexBuffer, 0, vk::IndexType::eUint16);
+
+    m_CommandBuffers[m_CurrentFrame]->get().bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, m_GraphicsPipeline->GetLayout(), 0,
+        *m_GraphicsPipeline->GetDescriptorSets()[m_CurrentFrame], nullptr);
 
     m_CommandBuffers[m_CurrentFrame]->get().drawIndexed(indices.size(), 1, 0, 0,
                                                         0);

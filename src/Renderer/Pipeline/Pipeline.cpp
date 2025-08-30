@@ -31,9 +31,16 @@ struct Vertex {
   }
 };
 
-Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain) {
+Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain,
+                   uint32_t maxFramesInFlight,
+                   std::vector<vk::raii::Buffer> &uniformBuffers,
+                   size_t uniformBufferObjectSize) {
   vk::raii::ShaderModule shaderModule =
       createShaderModule(readFile("shaders/slang.spv"), device);
+
+  CreateDescriptorPool(maxFramesInFlight);
+  CreateDescriptorSets(device, maxFramesInFlight, uniformBuffers,
+                       uniformBufferObjectSize);
 
   vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
   vertShaderStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
@@ -70,7 +77,7 @@ Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain) {
   rasterizer.rasterizerDiscardEnable = vk::False;
   rasterizer.polygonMode = vk::PolygonMode::eFill;
   rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-  rasterizer.frontFace = vk::FrontFace::eClockwise;
+  rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
   rasterizer.depthBiasEnable = vk::False;
   rasterizer.depthBiasSlopeFactor = 1.0f;
   rasterizer.lineWidth = 1.0f;
@@ -175,4 +182,48 @@ void Pipeline::CreateDescriptorSetLayout(Renderer::Device &device) {
   m_DescriptorSetLayout =
       vk::raii::DescriptorSetLayout(device.GetDevice(), layoutInfo, nullptr);
 }
+
+void Pipeline::CreateDescriptorPool(uint32_t maxFramesInFlight) {
+  vk::DescriptorPoolSize poolSize(vk::DescriptorType::eUniformBuffer,
+                                  maxFramesInFlight);
+
+  vk::DescriptorPoolCreateInfo poolInfo{};
+  poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+  poolInfo.maxSets = maxFramesInFlight;
+  poolInfo.poolSizeCount = 1;
+  poolInfo.pPoolSizes = &poolSize;
+}
+
+void Pipeline::CreateDescriptorSets(
+    Renderer::Device &device, uint32_t maxFramesInFlight,
+    std::vector<vk::raii::Buffer> &uniformBuffers,
+    size_t uniformBufferObjectSize) {
+  std::vector<vk::DescriptorSetLayout> layouts(maxFramesInFlight,
+                                               *m_DescriptorSetLayout);
+  vk::DescriptorSetAllocateInfo allocInfo{};
+  allocInfo.descriptorPool = m_DescriptorPool;
+  allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+  allocInfo.pSetLayouts = layouts.data();
+
+  m_DescriptorSets.clear();
+  m_DescriptorSets = device.GetDevice().allocateDescriptorSets(allocInfo);
+
+  for (size_t i = 0; i < maxFramesInFlight; i++) {
+    vk::DescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = uniformBuffers[i];
+    bufferInfo.offset = 0;
+    bufferInfo.range = uniformBufferObjectSize;
+
+    vk::WriteDescriptorSet descriptorWrite{};
+    descriptorWrite.dstSet = m_DescriptorSets[i];
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+    descriptorWrite.pBufferInfo = &bufferInfo;
+
+    device.GetDevice().updateDescriptorSets(descriptorWrite, {});
+  }
+}
+
 } // namespace Renderer
