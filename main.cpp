@@ -73,6 +73,12 @@ const std::vector<uint16_t> indices = {
     0, 1, 2, 2, 3, 0,
 };
 
+struct UniformBufferObject {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
+};
+
 class HelloTriangleApplication {
 public:
   void run() {
@@ -94,6 +100,8 @@ private:
         std::make_unique<Renderer::Swapchain>(*m_DeviceHand, *m_Window);
     m_SwapChain->CreateImageViews(*m_DeviceHand);
 
+    createDescriptorSetLayout();
+
     m_GraphicsPipeline =
         std::make_unique<Renderer::Pipeline>(*m_DeviceHand, *m_SwapChain);
 
@@ -108,6 +116,20 @@ private:
     createSyncObjects();
   }
 
+  void createDescriptorSetLayout() {
+    vk::DescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.flags = {};
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+    m_DescriptorSetLayout = vk::raii::DescriptorSetLayout(
+        m_DeviceHand->GetDevice(), layoutInfo, nullptr);
+  }
   void createIndexBuffer() {
     vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
@@ -461,6 +483,9 @@ private:
 
   vk::raii::Buffer m_IndexBuffer = nullptr;
   vk::raii::DeviceMemory m_IndexBufferMemory = nullptr;
+
+  vk::raii::DescriptorSetLayout m_DescriptorSetLayout = nullptr;
+  vk::raii::PipelineLayout m_PipelineLayout = nullptr;
 };
 
 int main() {

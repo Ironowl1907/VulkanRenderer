@@ -20,9 +20,13 @@ private:
   [[nodiscard]] vk::raii::ShaderModule
   createShaderModule(const std::vector<char> &code, Renderer::Device &device);
 
+  void CreateDescriptorSetLayout(Renderer::Device &device);
+
 private:
   vk::raii::PipelineLayout m_PipelineLayout = nullptr;
   vk::raii::Pipeline m_GraphicsPipeline = nullptr;
+
+  vk::raii::DescriptorSetLayout m_DescriptorSetLayout = nullptr;
 };
 
 } // namespace Renderer

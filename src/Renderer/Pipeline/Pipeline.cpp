@@ -98,8 +98,11 @@ Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain) {
   dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
   dynamicState.pDynamicStates = dynamicStates.data();
 
+  CreateDescriptorSetLayout(device);
+
   vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-  pipelineLayoutInfo.setLayoutCount = 0;
+  pipelineLayoutInfo.setLayoutCount = 1;
+  pipelineLayoutInfo.pSetLayouts = &*m_DescriptorSetLayout;
   pipelineLayoutInfo.pushConstantRangeCount = 0;
 
   m_PipelineLayout =
@@ -158,4 +161,18 @@ Pipeline::createShaderModule(const std::vector<char> &code,
   return shaderModule;
 }
 
+void Pipeline::CreateDescriptorSetLayout(Renderer::Device &device) {
+  vk::DescriptorSetLayoutBinding uboLayoutBinding{};
+  uboLayoutBinding.binding = 0;
+  uboLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+  uboLayoutBinding.descriptorCount = 1;
+  uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
+
+  vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+  layoutInfo.flags = {};
+  layoutInfo.bindingCount = 1;
+  layoutInfo.pBindings = &uboLayoutBinding;
+  m_DescriptorSetLayout =
+      vk::raii::DescriptorSetLayout(device.GetDevice(), layoutInfo, nullptr);
+}
 } // namespace Renderer
