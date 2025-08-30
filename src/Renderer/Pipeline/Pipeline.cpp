@@ -35,12 +35,14 @@ Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain,
                    uint32_t maxFramesInFlight,
                    std::vector<vk::raii::Buffer> &uniformBuffers,
                    size_t uniformBufferObjectSize) {
-  vk::raii::ShaderModule shaderModule =
-      createShaderModule(readFile("shaders/slang.spv"), device);
 
-  CreateDescriptorPool(maxFramesInFlight);
+  CreateDescriptorSetLayout(device);
+  CreateDescriptorPool(device, maxFramesInFlight);
   CreateDescriptorSets(device, maxFramesInFlight, uniformBuffers,
                        uniformBufferObjectSize);
+
+  vk::raii::ShaderModule shaderModule =
+      createShaderModule(readFile("shaders/slang.spv"), device);
 
   vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
   vertShaderStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
@@ -104,8 +106,6 @@ Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain,
   vk::PipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
   dynamicState.pDynamicStates = dynamicStates.data();
-
-  CreateDescriptorSetLayout(device);
 
   vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.setLayoutCount = 1;
@@ -183,7 +183,8 @@ void Pipeline::CreateDescriptorSetLayout(Renderer::Device &device) {
       vk::raii::DescriptorSetLayout(device.GetDevice(), layoutInfo, nullptr);
 }
 
-void Pipeline::CreateDescriptorPool(uint32_t maxFramesInFlight) {
+void Pipeline::CreateDescriptorPool(Renderer::Device &device,
+                                    uint32_t maxFramesInFlight) {
   vk::DescriptorPoolSize poolSize(vk::DescriptorType::eUniformBuffer,
                                   maxFramesInFlight);
 
@@ -192,6 +193,8 @@ void Pipeline::CreateDescriptorPool(uint32_t maxFramesInFlight) {
   poolInfo.maxSets = maxFramesInFlight;
   poolInfo.poolSizeCount = 1;
   poolInfo.pPoolSizes = &poolSize;
+
+  m_DescriptorPool = vk::raii::DescriptorPool(device.GetDevice(), poolInfo);
 }
 
 void Pipeline::CreateDescriptorSets(
@@ -201,7 +204,7 @@ void Pipeline::CreateDescriptorSets(
   std::vector<vk::DescriptorSetLayout> layouts(maxFramesInFlight,
                                                *m_DescriptorSetLayout);
   vk::DescriptorSetAllocateInfo allocInfo{};
-  allocInfo.descriptorPool = m_DescriptorPool;
+  allocInfo.descriptorPool = *m_DescriptorPool;
   allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
   allocInfo.pSetLayouts = layouts.data();
 

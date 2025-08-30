@@ -28,7 +28,8 @@ private:
   createShaderModule(const std::vector<char> &code, Renderer::Device &device);
 
   void CreateDescriptorSetLayout(Renderer::Device &device);
-  void CreateDescriptorPool(uint32_t maxFramesInFlight);
+  void CreateDescriptorPool(Renderer::Device &device,
+                            uint32_t maxFramesInFlight);
   void CreateDescriptorSets(Renderer::Device &device,
                             uint32_t maxFramesInFlight,
                             std::vector<vk::raii::Buffer> &uniformBuffers,
