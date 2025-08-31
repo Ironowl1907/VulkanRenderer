@@ -79,16 +79,16 @@ const std::vector<uint16_t> indices = {
 };
 
 struct UniformBufferObject {
-  glm::mat4 model;
-  glm::mat4 view;
-  glm::mat4 proj;
+  alignas(16) glm::mat4 model;
+  alignas(16) glm::mat4 view;
+  alignas(16) glm::mat4 proj;
 };
 
 class HelloTriangleApplication {
 public:
   void run() {
-    m_Window = std::make_unique<Renderer::Window>(WIDTH, HEIGHT,
-                                                  framebufferResizeCallback);
+    m_Window = std::make_unique<Renderer::Window>(
+        WIDTH, HEIGHT, framebufferResizeCallback, this);
     initVulkan();
     mainLoop();
     cleanup();
@@ -198,6 +198,7 @@ private:
     m_RenderFinishedSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
     m_InFlightFences.reserve(MAX_FRAMES_IN_FLIGHT);
 
+    // for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     for (size_t i = 0; i < m_SwapChain->GetImages().size(); i++) {
       m_ImageAvailableSemaphores.emplace_back(
           m_DeviceHand->GetDevice().createSemaphore({}));
@@ -212,6 +213,7 @@ private:
   }
 
   void mainLoop() {
+
     while (!glfwWindowShouldClose(m_Window->GetWindow())) {
       glfwPollEvents();
       drawFrame();
@@ -230,9 +232,8 @@ private:
 
     if (result == vk::Result::eErrorOutOfDateKHR ||
         result == vk::Result::eSuboptimalKHR) {
-      m_FramebufferResized = false;
       m_SwapChain->RecreateSwapChain(*m_DeviceHand, *m_Window);
-      return;
+      m_FramebufferResized = true;
     }
 
     if (result != vk::Result::eSuccess &&
@@ -499,8 +500,10 @@ private:
                                         int height) {
     auto app = reinterpret_cast<HelloTriangleApplication *>(
         glfwGetWindowUserPointer(window));
-    app->m_FramebufferResized = true;
+    app->SetResize(true);
   }
+
+  void SetResize(bool set) { m_FramebufferResized = set; }
 
 private:
   std::unique_ptr<Renderer::Instance> m_Instance;

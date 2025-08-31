@@ -1,4 +1,5 @@
 #include "Swapchain.h"
+#include <iostream>
 #include <limits>
 
 namespace Renderer {
@@ -119,7 +120,6 @@ void Swapchain::CleanupSwapChain() {
 
 void Swapchain::RecreateSwapChain(Renderer::Device &device,
                                   Renderer::Window &window) {
-  // std::cout << "Recreating the swapchain" << std::endl;
   int width = 0, height = 0;
   glfwGetFramebufferSize(window.GetWindow(), &width, &height);
   while (width == 0 || height == 0) {

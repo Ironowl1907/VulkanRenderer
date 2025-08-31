@@ -10,7 +10,8 @@ namespace Renderer {
 class Window {
 public:
   Window(uint32_t width, uint32_t height,
-         void (*resizeCallback)(GLFWwindow *window, int width, int height));
+         void (*resizeCallback)(GLFWwindow *window, int width, int height),
+         void *application);
   ~Window();
 
   void Clean();
