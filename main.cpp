@@ -27,6 +27,7 @@
 #include "src/Renderer/Instance/Instance.h"
 #include "src/Renderer/Pipeline/Pipeline.h"
 #include "src/Renderer/Swapchain/Swapchain.h"
+#include "src/Renderer/Texture/Texture.h"
 #include "src/Renderer/Window/Window.h"
 
 constexpr uint32_t WIDTH = 800;
@@ -110,6 +111,7 @@ private:
         vk::CommandPoolCreateFlags::BitsType::eResetCommandBuffer);
 
     m_BufferManager = std::make_unique<Renderer::BufferManager>();
+    m_TestTexture = std::make_unique<Renderer::Texture>(*m_BufferManager);
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -512,6 +514,7 @@ private:
   std::unique_ptr<Renderer::Swapchain> m_SwapChain;
   std::unique_ptr<Renderer::Pipeline> m_GraphicsPipeline;
   std::unique_ptr<Renderer::BufferManager> m_BufferManager;
+  std::unique_ptr<Renderer::Texture> m_TestTexture;
 
   std::unique_ptr<Renderer::CommandPool> m_CommandPool;
   std::vector<std::unique_ptr<Renderer::CommandBuffer>> m_CommandBuffers;

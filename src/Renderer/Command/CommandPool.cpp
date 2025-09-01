@@ -58,7 +58,25 @@ void CommandPool::reset(vk::CommandPoolResetFlags flags) {
   m_CommandPool.reset(flags);
 }
 
-CommandBuffer::CommandBuffer(vk::raii::CommandBuffer &&commandBuffer)
-    : commandBuffer_(std::move(commandBuffer)) {}
+vk::raii::CommandBuffer CommandPool::beginSingleTimeCommands(Device &device) {
+  vk::CommandBufferAllocateInfo allocInfo(m_CommandPool,
+                                          vk::CommandBufferLevel::ePrimary, 1);
+  vk::raii::CommandBuffer commandBuffer =
+      std::move(device.GetDevice().allocateCommandBuffers(allocInfo).front());
+
+  vk::CommandBufferBeginInfo beginInfo(
+      vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+  commandBuffer.begin(beginInfo);
+
+  return commandBuffer;
+}
+void CommandPool::endSingleTimeCommands(
+    Device &device, vk::raii::CommandBuffer &commandBuffer) {
+  commandBuffer.end();
+
+  vk::SubmitInfo submitInfo({}, {}, {*commandBuffer});
+  device.GetGraphicsQueue().submit(submitInfo, nullptr);
+  device.GetGraphicsQueue().waitIdle();
+}
 
 } // namespace Renderer

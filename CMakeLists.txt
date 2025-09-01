@@ -22,6 +22,10 @@ add_custom_target(run
 
 target_compile_options(Renderer PRIVATE -Wall -Wextra)
 
+target_include_directories(Renderer PRIVATE
+    ./vendor/
+)
+
 target_link_libraries(Renderer
     glfw
     vulkan

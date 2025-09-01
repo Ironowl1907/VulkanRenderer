@@ -19,6 +19,10 @@ public:
   allocatePrimary(uint32_t maxFramesInFlight);
   std::unique_ptr<CommandBuffer> allocateSecondary();
 
+  vk::raii::CommandBuffer beginSingleTimeCommands(Device &device);
+  void endSingleTimeCommands(Device &device,
+                             vk::raii::CommandBuffer &commandBuffer);
+
   // Pool management
   void reset(vk::CommandPoolResetFlags flags = {});
 

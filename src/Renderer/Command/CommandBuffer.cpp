@@ -31,4 +31,7 @@ void CommandBuffer::drawIndexed(uint32_t indexCount, uint32_t instanceCount,
                                 uint32_t firstIndex, int32_t vertexOffset,
                                 uint32_t firstInstance) {}
 
+CommandBuffer::CommandBuffer(vk::raii::CommandBuffer &&commandBuffer)
+    : commandBuffer_(std::move(commandBuffer)) {}
+
 } // namespace Renderer
