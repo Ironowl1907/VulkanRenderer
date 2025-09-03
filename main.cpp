@@ -112,6 +112,8 @@ private:
 
     m_BufferManager = std::make_unique<Renderer::BufferManager>();
     m_TestTexture = std::make_unique<Renderer::Texture>(*m_BufferManager);
+    m_TestTexture->loadFromFile(*m_DeviceHand, *m_CommandPool, *m_BufferManager,
+                                "textures/owl.jpg");
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();

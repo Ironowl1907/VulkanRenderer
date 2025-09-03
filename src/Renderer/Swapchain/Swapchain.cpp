@@ -100,24 +100,15 @@ vk::PresentModeKHR Swapchain::ChooseSwapPresentMode(
 
 void Swapchain::CreateImageViews(Renderer::Device &device) {
   m_SwapChainImageViews.clear();
-  //
-  // vk::ImageViewCreateInfo imageViewCreateInfo{};
-  // imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
-  // imageViewCreateInfo.format = m_SwapChainImageFormat;
-  // imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0,
-  // 1,
-  //                                         0, 1};
-  // for (auto image : m_SwapChainImages) {
-  //   imageViewCreateInfo.image = image;
-  //   m_SwapChainImageViews.emplace_back(device.GetDevice(),
-  //   imageViewCreateInfo);
-  // }
 
-  m_SwapChainImageViews.resize(m_SwapChainImages.size());
-
-  for (uint32_t i = 0; i < m_SwapChainImages.size(); i++) {
-    m_SwapChainImageViews[i] = Texture::createImageView(
-        device, m_SwapChainImages[i], m_SwapChainImageFormat);
+  vk::ImageViewCreateInfo imageViewCreateInfo{};
+  imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
+  imageViewCreateInfo.format = m_SwapChainImageFormat;
+  imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1,
+                                          0, 1};
+  for (auto image : m_SwapChainImages) {
+    imageViewCreateInfo.image = image;
+    m_SwapChainImageViews.emplace_back(device.GetDevice(), imageViewCreateInfo);
   }
 }
 

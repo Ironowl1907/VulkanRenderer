@@ -39,8 +39,8 @@ public:
   vk::Format getFormat() const { return m_format; }
 
   // Helpers
-  static vk::raii::ImageView createImageView(Device &device, vk::Image &image,
-                                             vk::Format format);
+  static vk::raii::ImageView
+  createImageView(Device &device, vk::raii::Image &image, vk::Format format);
 
   void cleanup();
 

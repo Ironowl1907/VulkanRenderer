@@ -3,6 +3,7 @@
 #include "../Command/CommandPool.h"
 #include "../Device/Device.h"
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -10,7 +11,8 @@
 
 namespace Renderer {
 
-vk::raii::ImageView Texture::createImageView(Device &device, vk::Image &image,
+vk::raii::ImageView Texture::createImageView(Device &device,
+                                             vk::raii::Image &image,
                                              vk::Format format) {
   vk::ImageViewCreateInfo viewInfo(
       {}, image, vk::ImageViewType::e2D, format, {},
@@ -77,6 +79,7 @@ bool Texture::createFromData(Device &device, CommandPool &commandPool,
                         vk::ImageLayout::eUndefined,
                         vk::ImageLayout::eTransferDstOptimal);
 
+  // TODO: This implementation
   copyBufferToImage(device, commandPool, stagingBuffer, m_width, m_height);
 
   transitionImageLayout(device, commandPool, m_format,
@@ -126,11 +129,31 @@ void Texture::createImage(Device &device, uint32_t width, uint32_t height,
 }
 
 void Texture::createTexImageView(Device &device, vk::Format format) {
-
-  m_imageView = createImageView(device, *m_image, format);
+  m_imageView = createImageView(device, m_image, format);
 }
 
-void Texture::createSampler(Device &device) {}
+void Texture::createSampler(Device &device) {
+
+  vk::PhysicalDeviceProperties properties =
+      device.GetPhysicalDevice().getProperties();
+  vk::SamplerCreateInfo samplerInfo(
+      {}, vk::Filter::eLinear, vk::Filter::eLinear,
+      vk::SamplerMipmapMode::eLinear, vk::SamplerAddressMode::eRepeat,
+      vk::SamplerAddressMode::eRepeat, vk::SamplerAddressMode::eRepeat, 0, 1,
+      properties.limits.maxSamplerAnisotropy, vk::False,
+      vk::CompareOp::eAlways);
+  samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+  samplerInfo.unnormalizedCoordinates = vk::False;
+  samplerInfo.compareEnable = vk::False;
+  samplerInfo.compareOp = vk::CompareOp::eAlways;
+
+  samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+  samplerInfo.mipLodBias = 0.0f;
+  samplerInfo.minLod = 0.0f;
+  samplerInfo.maxLod = 0.0f;
+
+  m_sampler = vk::raii::Sampler(device.GetDevice(), samplerInfo);
+}
 
 void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
                                     vk::Format format,

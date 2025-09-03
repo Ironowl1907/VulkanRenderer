@@ -1,4 +1,5 @@
 #include "Device.h"
+#include <vulkan/vulkan_structs.hpp>
 
 namespace Renderer {
 
@@ -47,17 +48,20 @@ void Device::PickPhysicalDevice(Renderer::Instance &instance) {
 
     auto vulkan13Features =
         features.template get<vk::PhysicalDeviceVulkan13Features>();
+    auto basicFeatures = features.template get<vk::PhysicalDeviceFeatures2>();
+
     bool supportsRequiredFeatures =
         vulkan13Features.dynamicRendering &&
         vulkan13Features.synchronization2 &&
         features
             .template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
-            .extendedDynamicState;
+            .extendedDynamicState &&
+        basicFeatures.features
+            .samplerAnisotropy; // Check for anisotropy support
 
     if (supportsVulkan1_3 && supportsGraphics &&
         supportsAllRequiredExtensions && supportsRequiredFeatures) {
-      m_PhysicalDevice =
-          std::move(vk::raii::PhysicalDevice(instance.GetRaii(), *device));
+      m_PhysicalDevice = vk::raii::PhysicalDevice(instance.GetRaii(), *device);
       return;
     }
   }
@@ -136,6 +140,7 @@ void Device::CreateLogicalDevice(const vk::SurfaceKHR &surface) {
   extendedDynamicStateFeatures.extendedDynamicState = vk::True;
   vulkan13Features.pNext = &extendedDynamicStateFeatures;
   vulkan13Features.synchronization2 = vk::True;
+  features.features.samplerAnisotropy = vk::True;
   features.pNext = &vulkan13Features;
   // create a Device
   float queuePriority = 0.0f;
