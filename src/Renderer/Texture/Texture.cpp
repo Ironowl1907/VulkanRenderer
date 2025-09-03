@@ -152,6 +152,9 @@ void Texture::createSampler(Device &device) {
   samplerInfo.minLod = 0.0f;
   samplerInfo.maxLod = 0.0f;
 
+  samplerInfo.anisotropyEnable = VK_FALSE;
+  samplerInfo.maxAnisotropy = 1.0f;
+
   m_sampler = vk::raii::Sampler(device.GetDevice(), samplerInfo);
 }
 
