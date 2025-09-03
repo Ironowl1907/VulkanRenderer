@@ -38,6 +38,10 @@ public:
   uint32_t getHeight() const { return m_height; }
   vk::Format getFormat() const { return m_format; }
 
+  // Helpers
+  static vk::raii::ImageView createImageView(Device &device, vk::Image &image,
+                                             vk::Format format);
+
   void cleanup();
 
 private:
@@ -46,10 +50,11 @@ private:
                    vk::ImageUsageFlags usage,
                    vk::MemoryPropertyFlags properties);
 
-  void createImageView(const Device &device, vk::Format format);
+  void createTexImageView(Device &device, vk::Format format);
+
   void createSampler(Device &device);
 
-  void transitionImageLayout(const Device &device, CommandPool &commandPool,
+  void transitionImageLayout(Device &device, CommandPool &commandPool,
                              vk::Format format, vk::ImageLayout oldLayout,
                              vk::ImageLayout newLayout);
 

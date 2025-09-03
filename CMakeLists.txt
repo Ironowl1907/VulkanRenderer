@@ -12,6 +12,7 @@ add_executable(Renderer main.cpp
   ./src/Renderer/Command/CommandBuffer.cpp
   ./src/Renderer/Command/CommandPool.cpp
   ./src/Renderer/Buffer/Buffer.cpp
+  ./src/Renderer/Texture/Texture.cpp
 )
 
 add_custom_target(run

@@ -10,6 +10,14 @@
 
 namespace Renderer {
 
+vk::raii::ImageView Texture::createImageView(Device &device, vk::Image &image,
+                                             vk::Format format) {
+  vk::ImageViewCreateInfo viewInfo(
+      {}, image, vk::ImageViewType::e2D, format, {},
+      {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+  return vk::raii::ImageView(device.GetDevice(), viewInfo);
+}
+
 Texture::Texture(BufferManager &bufferManager)
     : m_bufferManager(bufferManager) {}
 
@@ -75,7 +83,7 @@ bool Texture::createFromData(Device &device, CommandPool &commandPool,
                         vk::ImageLayout::eTransferDstOptimal,
                         vk::ImageLayout::eShaderReadOnlyOptimal);
 
-  createImageView(device, m_format);
+  createTexImageView(device, m_format);
   createSampler(device);
 
   return true;
@@ -90,7 +98,7 @@ bool Texture::createEmpty(Device &device, uint32_t width, uint32_t height,
   createImage(device, width, height, format, vk::ImageTiling::eOptimal, usage,
               vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-  createImageView(device, format);
+  createTexImageView(device, format);
   createSampler(device);
 
   return true;
@@ -117,15 +125,69 @@ void Texture::createImage(Device &device, uint32_t width, uint32_t height,
   m_image.bindMemory(*m_imageMemory, 0);
 }
 
-void Texture::createImageView(const Device &device, vk::Format format) {
-} // namespace Renderer
+void Texture::createTexImageView(Device &device, vk::Format format) {
+
+  m_imageView = createImageView(device, *m_image, format);
+}
 
 void Texture::createSampler(Device &device) {}
 
-void Texture::transitionImageLayout(const Device &device,
-                                    CommandPool &commandPool, vk::Format format,
+void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
+                                    vk::Format format,
                                     vk::ImageLayout oldLayout,
-                                    vk::ImageLayout newLayout) {}
+                                    vk::ImageLayout newLayout) {
+  auto commandBuffer = commandPool.beginSingleTimeCommands(device);
+
+  vk::ImageMemoryBarrier barrier(
+      {}, {},
+      oldLayout,                           // oldLayout
+      newLayout,                           // newLayout
+      VK_QUEUE_FAMILY_IGNORED,             // srcQueueFamilyIndex
+      VK_QUEUE_FAMILY_IGNORED,             // dstQueueFamilyIndex
+      *m_image,                            // image
+      vk::ImageSubresourceRange(           // subresourceRange
+          vk::ImageAspectFlagBits::eColor, // aspectMask
+          0,                               // baseMipLevel
+          1,                               // levelCount
+          0,                               // baseArrayLayer
+          1                                // layerCount
+          ));
+
+  vk::PipelineStageFlags sourceStage;
+  vk::PipelineStageFlags destinationStage;
+
+  // Set access masks and pipeline stages based on layout transition
+  if (oldLayout == vk::ImageLayout::eUndefined &&
+      newLayout == vk::ImageLayout::eTransferDstOptimal) {
+    barrier.srcAccessMask = {};
+    barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+    sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    destinationStage = vk::PipelineStageFlagBits::eTransfer;
+  } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
+             newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+    sourceStage = vk::PipelineStageFlagBits::eTransfer;
+    destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+  } else if (oldLayout == vk::ImageLayout::eUndefined &&
+             newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+    barrier.srcAccessMask = {};
+    barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                            vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+    sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+  } else {
+    throw std::invalid_argument("Unsupported layout transition!");
+  }
+
+  commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, nullptr,
+                                barrier);
+
+  commandPool.endSingleTimeCommands(device, commandBuffer);
+}
 
 void Texture::copyBufferToImage(const Device &device, CommandPool &commandPool,
                                 const vk::raii::Buffer &buffer, uint32_t width,
