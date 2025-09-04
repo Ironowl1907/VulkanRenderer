@@ -69,21 +69,20 @@ bool Texture::createFromData(Device &device, CommandPool &commandPool,
   memcpy(mappedData, data, static_cast<size_t>(imageSize));
   stagingBufferMemory.unmapMemory();
 
-  createImage(device, m_width, m_height, m_format, vk::ImageTiling::eOptimal,
+  CreateImage(device, m_width, m_height, m_format, vk::ImageTiling::eOptimal,
               vk::ImageUsageFlagBits::eTransferDst |
                   vk::ImageUsageFlagBits::eSampled,
-              vk::MemoryPropertyFlagBits::eDeviceLocal);
+              vk::MemoryPropertyFlagBits::eDeviceLocal, m_image, m_imageMemory);
 
   transitionImageLayout(device, commandPool, m_format,
                         vk::ImageLayout::eUndefined,
-                        vk::ImageLayout::eTransferDstOptimal);
+                        vk::ImageLayout::eTransferDstOptimal, m_image);
 
-  // TODO: This implementation
   copyBufferToImage(device, commandPool, stagingBuffer, m_width, m_height);
 
   transitionImageLayout(device, commandPool, m_format,
                         vk::ImageLayout::eTransferDstOptimal,
-                        vk::ImageLayout::eShaderReadOnlyOptimal);
+                        vk::ImageLayout::eShaderReadOnlyOptimal, m_image);
 
   createTexImageView(device, m_format);
   createSampler(device);
@@ -97,8 +96,8 @@ bool Texture::createEmpty(Device &device, uint32_t width, uint32_t height,
   m_height = height;
   m_format = format;
 
-  createImage(device, width, height, format, vk::ImageTiling::eOptimal, usage,
-              vk::MemoryPropertyFlagBits::eDeviceLocal);
+  CreateImage(device, width, height, format, vk::ImageTiling::eOptimal, usage,
+              vk::MemoryPropertyFlagBits::eDeviceLocal, m_image, m_imageMemory);
 
   createTexImageView(device, format);
   createSampler(device);
@@ -106,24 +105,53 @@ bool Texture::createEmpty(Device &device, uint32_t width, uint32_t height,
   return true;
 }
 
-void Texture::createImage(Device &device, uint32_t width, uint32_t height,
-                          vk::Format format, vk::ImageTiling tiling,
-                          vk::ImageUsageFlags usage,
-                          vk::MemoryPropertyFlags properties) {
+void Texture::CreateImage(Renderer::Device &device, uint32_t width,
+                          uint32_t height, vk::Format format,
+                          vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+                          vk::MemoryPropertyFlags properties,
+                          vk::raii::Image &image,
+                          vk::raii::DeviceMemory &imageMemory) {
+  vk::ImageCreateInfo imageInfo{};
+  imageInfo.imageType = vk::ImageType::e2D;
+  imageInfo.extent.width = width;
+  imageInfo.extent.height = height;
+  imageInfo.extent.depth = 1;
+  imageInfo.mipLevels = 1;
+  imageInfo.arrayLayers = 1;
+  imageInfo.format = format;
+  imageInfo.tiling = tiling;
+  imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+  imageInfo.usage = usage;
+  imageInfo.samples = vk::SampleCountFlagBits::e1;
+  imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
-  vk::ImageCreateInfo imageInfo({}, vk::ImageType::e2D, format,
-                                {width, height, 1}, 1, 1,
-                                vk::SampleCountFlagBits::e1, tiling, usage,
-                                vk::SharingMode::eExclusive, 0);
+  image = vk::raii::Image(device.GetDevice(), imageInfo);
 
-  m_image = vk::raii::Image(device.GetDevice(), imageInfo);
+  vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
 
-  vk::MemoryRequirements memRequirements = m_image.getMemoryRequirements();
-  vk::MemoryAllocateInfo allocInfo(
-      memRequirements.size,
-      device.FindMemoryType(memRequirements.memoryTypeBits, properties));
-  m_imageMemory = vk::raii::DeviceMemory(device.GetDevice(), allocInfo);
-  m_image.bindMemory(*m_imageMemory, 0);
+  vk::MemoryAllocateInfo allocInfo{};
+  allocInfo.allocationSize = memRequirements.size;
+  allocInfo.memoryTypeIndex =
+      device.FindMemoryType(memRequirements.memoryTypeBits, properties);
+
+  imageMemory = vk::raii::DeviceMemory(device.GetDevice(), allocInfo);
+  image.bindMemory(*imageMemory, 0);
+}
+
+vk::raii::ImageView Texture::CreateImageView(Renderer::Device &device,
+                                             vk::Image image, vk::Format format,
+                                             vk::ImageAspectFlags aspectFlags) {
+  vk::ImageViewCreateInfo viewInfo{};
+  viewInfo.image = image;
+  viewInfo.viewType = vk::ImageViewType::e2D;
+  viewInfo.format = format;
+  viewInfo.subresourceRange.aspectMask = aspectFlags;
+  viewInfo.subresourceRange.baseMipLevel = 0;
+  viewInfo.subresourceRange.levelCount = 1;
+  viewInfo.subresourceRange.baseArrayLayer = 0;
+  viewInfo.subresourceRange.layerCount = 1;
+
+  return vk::raii::ImageView(device.GetDevice(), viewInfo);
 }
 
 void Texture::createTexImageView(Device &device, vk::Format format) {
@@ -159,28 +187,32 @@ void Texture::createSampler(Device &device) {
 void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
                                     vk::Format format,
                                     vk::ImageLayout oldLayout,
-                                    vk::ImageLayout newLayout) {
+                                    vk::ImageLayout newLayout,
+                                    vk::raii::Image &image) {
   auto commandBuffer = commandPool.beginSingleTimeCommands(device);
 
+  // Pick correct aspect mask
+  vk::ImageAspectFlags aspectMask;
+  if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+    if (format == vk::Format::eD32SfloatS8Uint ||
+        format == vk::Format::eD24UnormS8Uint) {
+      aspectMask =
+          vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+    } else {
+      aspectMask = vk::ImageAspectFlagBits::eDepth;
+    }
+  } else {
+    aspectMask = vk::ImageAspectFlagBits::eColor;
+  }
+
   vk::ImageMemoryBarrier barrier(
-      {}, {},
-      oldLayout,                           // oldLayout
-      newLayout,                           // newLayout
-      VK_QUEUE_FAMILY_IGNORED,             // srcQueueFamilyIndex
-      VK_QUEUE_FAMILY_IGNORED,             // dstQueueFamilyIndex
-      *m_image,                            // image
-      vk::ImageSubresourceRange(           // subresourceRange
-          vk::ImageAspectFlagBits::eColor, // aspectMask
-          0,                               // baseMipLevel
-          1,                               // levelCount
-          0,                               // baseArrayLayer
-          1                                // layerCount
-          ));
+      {}, {}, oldLayout, newLayout, VK_QUEUE_FAMILY_IGNORED,
+      VK_QUEUE_FAMILY_IGNORED, image,
+      vk::ImageSubresourceRange(aspectMask, 0, 1, 0, 1));
 
   vk::PipelineStageFlags sourceStage;
   vk::PipelineStageFlags destinationStage;
 
-  // Set access masks and pipeline stages based on layout transition
   if (oldLayout == vk::ImageLayout::eUndefined &&
       newLayout == vk::ImageLayout::eTransferDstOptimal) {
     barrier.srcAccessMask = {};
@@ -188,6 +220,7 @@ void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
 
     sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
     destinationStage = vk::PipelineStageFlagBits::eTransfer;
+
   } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
              newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
     barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -195,6 +228,7 @@ void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
 
     sourceStage = vk::PipelineStageFlagBits::eTransfer;
     destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+
   } else if (oldLayout == vk::ImageLayout::eUndefined &&
              newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
     barrier.srcAccessMask = {};
@@ -203,6 +237,7 @@ void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
 
     sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
     destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+
   } else {
     throw std::invalid_argument("Unsupported layout transition!");
   }

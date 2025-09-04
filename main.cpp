@@ -37,14 +37,17 @@ constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 const std::vector validationLayers = {"VK_LAYER_KHRONOS_validation"};
 
 const std::vector<Renderer::Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-};
-const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-};
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
+
+const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
 struct UniformBufferObject {
   alignas(16) glm::mat4 model;
@@ -68,14 +71,13 @@ private:
     m_Window->CreateSurface(*m_Instance);
     m_DeviceHand = std::make_unique<Renderer::Device>(*m_Instance,
                                                       *m_Window->GetSurface());
-
-    m_SwapChain =
-        std::make_unique<Renderer::Swapchain>(*m_DeviceHand, *m_Window);
-    m_SwapChain->CreateImageViews(*m_DeviceHand);
-
     m_CommandPool = std::make_unique<Renderer::CommandPool>(
         *m_DeviceHand,
         vk::CommandPoolCreateFlags::BitsType::eResetCommandBuffer);
+
+    m_SwapChain = std::make_unique<Renderer::Swapchain>(
+        *m_DeviceHand, *m_Window, *m_CommandPool);
+    m_SwapChain->CreateImageViews(*m_DeviceHand);
 
     m_BufferManager = std::make_unique<Renderer::BufferManager>();
     m_TestTexture = std::make_unique<Renderer::Texture>(*m_BufferManager);

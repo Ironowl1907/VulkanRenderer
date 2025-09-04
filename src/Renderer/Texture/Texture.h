@@ -42,21 +42,29 @@ public:
   static vk::raii::ImageView
   createImageView(Device &device, vk::raii::Image &image, vk::Format format);
 
+  static void CreateImage(Renderer::Device &device, uint32_t width,
+                          uint32_t height, vk::Format format,
+                          vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+                          vk::MemoryPropertyFlags properties,
+                          vk::raii::Image &image,
+                          vk::raii::DeviceMemory &imageMemory);
+
+  static vk::raii::ImageView CreateImageView(Renderer::Device &device,
+                                             vk::Image image, vk::Format format,
+                                             vk::ImageAspectFlags aspectFlags);
+
+  static void transitionImageLayout(Device &device, CommandPool &commandPool,
+                                    vk::Format format,
+                                    vk::ImageLayout oldLayout,
+                                    vk::ImageLayout newLayout,
+                                    vk::raii::Image &image);
+
   void cleanup();
 
 private:
-  void createImage(Device &device, uint32_t width, uint32_t height,
-                   vk::Format format, vk::ImageTiling tiling,
-                   vk::ImageUsageFlags usage,
-                   vk::MemoryPropertyFlags properties);
-
   void createTexImageView(Device &device, vk::Format format);
 
   void createSampler(Device &device);
-
-  void transitionImageLayout(Device &device, CommandPool &commandPool,
-                             vk::Format format, vk::ImageLayout oldLayout,
-                             vk::ImageLayout newLayout);
 
   void copyBufferToImage(Device &device, CommandPool &commandPool,
                          const vk::raii::Buffer &buffer, uint32_t width,

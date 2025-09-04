@@ -1,18 +1,18 @@
 #include "Swapchain.h"
 #include "../Texture/Texture.h"
-#include <iostream>
 #include <limits>
+#include <vulkan/vulkan_enums.hpp>
 
 namespace Renderer {
 
-Swapchain::Swapchain(Renderer::Device &device, Renderer::Window &window) {
+Swapchain::Swapchain(Device &device, Window &window, CommandPool &commandPool)
+    : m_commandPool(commandPool) {
   Create(device, window);
 }
 
 Swapchain::~Swapchain() {}
 
 void Swapchain::Create(Renderer::Device &device, Renderer::Window &window) {
-
   auto surfaceCapabilities =
       device.GetPhysicalDevice().getSurfaceCapabilitiesKHR(window.GetSurface());
 
@@ -48,14 +48,74 @@ void Swapchain::Create(Renderer::Device &device, Renderer::Window &window) {
   swapChainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
   swapChainCreateInfo.presentMode = ChooseSwapPresentMode(
       device.GetPhysicalDevice().getSurfacePresentModesKHR(
-          window.GetSurface())),
+          window.GetSurface()));
   swapChainCreateInfo.clipped = true;
   swapChainCreateInfo.oldSwapchain = nullptr;
+
   m_SwapChain = vk::raii::SwapchainKHR(device.GetDevice(), swapChainCreateInfo);
   m_SwapChainImages = m_SwapChain.getImages();
 
   m_SwapChainImageFormat = swapChainSurfaceFormat.format;
   m_SwapChainExtent = swapChainExtent;
+
+  createDepthResources(device, m_commandPool);
+}
+
+void Swapchain::createDepthResources(Device &device, CommandPool &commandPool) {
+  m_depthFormat = FindDepthFormat(device);
+
+  Texture::CreateImage(device, m_SwapChainExtent.width,
+                       m_SwapChainExtent.height, m_depthFormat,
+                       vk::ImageTiling::eOptimal,
+                       vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                       vk::MemoryPropertyFlagBits::eDeviceLocal, m_depthImage,
+                       m_depthImageMemory);
+
+  vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eDepth;
+  if (hasStencilComponent(m_depthFormat)) {
+    aspect |= vk::ImageAspectFlagBits::eStencil;
+  }
+
+  m_depthImageView =
+      Texture::CreateImageView(device, m_depthImage, m_depthFormat, aspect);
+
+  Texture::transitionImageLayout(
+      device, commandPool, m_depthFormat, vk::ImageLayout::eUndefined,
+      vk::ImageLayout::eDepthStencilAttachmentOptimal, m_depthImage);
+}
+
+vk::Format Swapchain::FindDepthFormat(Renderer::Device &device) {
+  // Try formats in order of preference (with stencil support first)
+  return FindSupportedFormat(
+      device,
+      {vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint,
+       vk::Format::eD32Sfloat},
+      vk::ImageTiling::eOptimal,
+      vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+}
+
+bool Swapchain::hasStencilComponent(vk::Format format) {
+  return format == vk::Format::eD32SfloatS8Uint ||
+         format == vk::Format::eD24UnormS8Uint;
+}
+
+vk::Format Swapchain::FindSupportedFormat(
+    Renderer::Device &device, const std::vector<vk::Format> &candidates,
+    vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
+  for (vk::Format format : candidates) {
+    vk::FormatProperties props =
+        device.GetPhysicalDevice().getFormatProperties(format);
+
+    if (tiling == vk::ImageTiling::eLinear &&
+        (props.linearTilingFeatures & features) == features) {
+      return format;
+    } else if (tiling == vk::ImageTiling::eOptimal &&
+               (props.optimalTilingFeatures & features) == features) {
+      return format;
+    }
+  }
+
+  throw std::runtime_error("Failed to find supported depth format!");
 }
 
 vk::Extent2D
@@ -115,12 +175,10 @@ void Swapchain::CreateImageViews(Renderer::Device &device) {
 void Swapchain::CleanupSwapChain() {
   m_SwapChainImageViews.clear();
   m_SwapChain.clear();
-
   m_SwapChain = nullptr;
 }
 
-void Swapchain::RecreateSwapChain(Renderer::Device &device,
-                                  Renderer::Window &window) {
+void Swapchain::RecreateSwapChain(Device &device, Window &window) {
   int width = 0, height = 0;
   glfwGetFramebufferSize(window.GetWindow(), &width, &height);
   while (width == 0 || height == 0) {
