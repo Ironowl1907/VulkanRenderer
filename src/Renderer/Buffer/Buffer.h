@@ -22,9 +22,6 @@ public:
                   vk::raii::Buffer &srcBuffer, vk::raii::Buffer &dstBuffer,
                   vk::DeviceSize size);
 
-  uint32_t FindMemoryType(Renderer::Device &device, uint32_t typeFilter,
-                          vk::MemoryPropertyFlags properties);
-
 private:
 private:
 };

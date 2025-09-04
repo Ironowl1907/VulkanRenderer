@@ -17,6 +17,9 @@ public:
   void PickPhysicalDevice(Renderer::Instance &instance);
   void CreateLogicalDevice(const vk::SurfaceKHR &surface);
 
+  uint32_t FindMemoryType(uint32_t typeFilter,
+                          vk::MemoryPropertyFlags properties);
+
   // TODO: HACK implementation, remove for a queue handler
   vk::raii::Queue GetGraphicsQueue() { return m_GraphicsQueue; }
   vk::raii::Queue GetPresentQueue() { return m_PresentQueue; }

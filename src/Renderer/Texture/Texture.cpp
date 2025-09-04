@@ -121,8 +121,7 @@ void Texture::createImage(Device &device, uint32_t width, uint32_t height,
   vk::MemoryRequirements memRequirements = m_image.getMemoryRequirements();
   vk::MemoryAllocateInfo allocInfo(
       memRequirements.size,
-      m_bufferManager.FindMemoryType(device, memRequirements.memoryTypeBits,
-                                     properties));
+      device.FindMemoryType(memRequirements.memoryTypeBits, properties));
   m_imageMemory = vk::raii::DeviceMemory(device.GetDevice(), allocInfo);
   m_image.bindMemory(*m_imageMemory, 0);
 }
