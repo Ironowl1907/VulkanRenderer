@@ -32,7 +32,6 @@ bool Texture::loadFromFile(Device &device, CommandPool &commandPool,
 
   if (!pixels) {
     throw std::runtime_error("Failed to load texture image: " + filepath);
-    return false;
   }
 
   // Force 4 channels (RGBA)
@@ -215,9 +214,29 @@ void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
   commandPool.endSingleTimeCommands(device, commandBuffer);
 }
 
-void Texture::copyBufferToImage(const Device &device, CommandPool &commandPool,
+void Texture::copyBufferToImage(Device &device, CommandPool &commandPool,
                                 const vk::raii::Buffer &buffer, uint32_t width,
-                                uint32_t height) {}
+                                uint32_t height) {
+  auto commandBuffer = commandPool.beginSingleTimeCommands(device);
+
+  vk::BufferImageCopy region;
+  region.bufferOffset = 0;
+  region.bufferRowLength = 0;   // Tightly packed
+  region.bufferImageHeight = 0; // Tightly packed
+
+  region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+  region.imageSubresource.mipLevel = 0;
+  region.imageSubresource.baseArrayLayer = 0;
+  region.imageSubresource.layerCount = 1;
+
+  region.imageOffset = vk::Offset3D{0, 0, 0};
+  region.imageExtent = vk::Extent3D{width, height, 1};
+
+  commandBuffer.copyBufferToImage(*buffer, *m_image,
+                                  vk::ImageLayout::eTransferDstOptimal, region);
+
+  commandPool.endSingleTimeCommands(device, commandBuffer);
+}
 
 void Texture::cleanup() {
   m_sampler.clear();

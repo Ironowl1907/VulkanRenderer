@@ -58,7 +58,7 @@ private:
                              vk::Format format, vk::ImageLayout oldLayout,
                              vk::ImageLayout newLayout);
 
-  void copyBufferToImage(const Device &device, CommandPool &commandPool,
+  void copyBufferToImage(Device &device, CommandPool &commandPool,
                          const vk::raii::Buffer &buffer, uint32_t width,
                          uint32_t height);
 
