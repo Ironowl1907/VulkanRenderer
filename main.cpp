@@ -431,42 +431,6 @@ private:
     m_CommandBuffers[m_CurrentFrame]->get().pipelineBarrier2(dependencyInfo);
   }
 
-  uint32_t findQueueFamilies(VkPhysicalDevice device) {
-    // find the index of the first queue family that supports graphics
-    std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
-        m_DeviceHand->GetPhysicalDevice().getQueueFamilyProperties();
-
-    // get the first index into queueFamilyProperties which supports graphics
-    auto graphicsQueueFamilyProperty =
-        std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
-                     [](vk::QueueFamilyProperties const &qfp) {
-                       return qfp.queueFlags & vk::QueueFlagBits::eGraphics;
-                     });
-
-    return static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(),
-                                               graphicsQueueFamilyProperty));
-  }
-
-  static std::vector<char> readFile(const std::string &filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    std::cout << "Opening file: " << filename << '\n'
-              << '\t'
-              << "Current Directory: " << std::filesystem::current_path()
-              << '\n';
-
-    if (!file.is_open()) {
-      std::cout << "Couldn't open file: " << filename << '\n';
-      throw std::runtime_error("error opening file!");
-    }
-
-    std::vector<char> buffer(file.tellg());
-    file.seekg(0, std::ios::beg);
-    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-
-    file.close();
-    return buffer;
-  }
-
   static void framebufferResizeCallback(GLFWwindow *window, int width,
                                         int height) {
     auto app = reinterpret_cast<HelloTriangleApplication *>(
