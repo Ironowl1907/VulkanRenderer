@@ -175,10 +175,19 @@ void Pipeline::CreateDescriptorSetLayout(Renderer::Device &device) {
   uboLayoutBinding.descriptorCount = 1;
   uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
+  vk::DescriptorSetLayoutBinding textureLayutBinding{};
+  uboLayoutBinding.binding = 1;
+  uboLayoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+  uboLayoutBinding.descriptorCount = 1;
+  uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+  std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
+      uboLayoutBinding, textureLayutBinding};
+
   vk::DescriptorSetLayoutCreateInfo layoutInfo{};
   layoutInfo.flags = {};
-  layoutInfo.bindingCount = 1;
-  layoutInfo.pBindings = &uboLayoutBinding;
+  layoutInfo.bindingCount = bindings.size();
+  layoutInfo.pBindings = bindings.data();
   m_DescriptorSetLayout =
       vk::raii::DescriptorSetLayout(device.GetDevice(), layoutInfo, nullptr);
 }
