@@ -1,45 +1,21 @@
 #include "Pipeline.h"
 #include <filesystem>
 #include <fstream>
-#include <glm/glm.hpp>
 #include <iostream>
 
 namespace Renderer {
 
-struct Vertex {
-  glm::vec2 pos;
-  glm::vec3 color;
-
-  static vk::VertexInputBindingDescription getBindingDescription() {
-    return {0, sizeof(Vertex), vk::VertexInputRate::eVertex};
-  }
-
-  static std::array<vk::VertexInputAttributeDescription, 2>
-  getAttributeDescriptions() {
-    return {{vk::VertexInputAttributeDescription{
-                 0,                         // location
-                 0,                         // binding
-                 vk::Format::eR32G32Sfloat, // format
-                 offsetof(Vertex, pos)      // offset
-             },
-             vk::VertexInputAttributeDescription{
-                 1,                            // location
-                 0,                            // binding
-                 vk::Format::eR32G32B32Sfloat, // format
-                 offsetof(Vertex, color)       // offset
-             }}};
-  }
-};
+;
 
 Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain,
                    uint32_t maxFramesInFlight,
                    std::vector<vk::raii::Buffer> &uniformBuffers,
-                   size_t uniformBufferObjectSize) {
+                   size_t uniformBufferObjectSize, Texture &texture) {
 
   CreateDescriptorSetLayout(device);
   CreateDescriptorPool(device, maxFramesInFlight);
   CreateDescriptorSets(device, maxFramesInFlight, uniformBuffers,
-                       uniformBufferObjectSize);
+                       uniformBufferObjectSize, texture);
 
   vk::raii::ShaderModule shaderModule =
       createShaderModule(readFile("shaders/slang.spv"), device);
@@ -64,7 +40,7 @@ Pipeline::Pipeline(Renderer::Device &device, Renderer::Swapchain &swapchain,
   auto attributeDescriptions = Vertex::getAttributeDescriptions();
   vertexInputInfo.vertexBindingDescriptionCount = 1;
   vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-  vertexInputInfo.vertexAttributeDescriptionCount = 2;
+  vertexInputInfo.vertexAttributeDescriptionCount = 3;
   vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
   vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -175,14 +151,15 @@ void Pipeline::CreateDescriptorSetLayout(Renderer::Device &device) {
   uboLayoutBinding.descriptorCount = 1;
   uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-  vk::DescriptorSetLayoutBinding textureLayutBinding{};
-  uboLayoutBinding.binding = 1;
-  uboLayoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-  uboLayoutBinding.descriptorCount = 1;
-  uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+  vk::DescriptorSetLayoutBinding textureLayoutBinding{};
+  textureLayoutBinding.binding = 1;
+  textureLayoutBinding.descriptorType =
+      vk::DescriptorType::eCombinedImageSampler;
+  textureLayoutBinding.descriptorCount = 1;
+  textureLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
   std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
-      uboLayoutBinding, textureLayutBinding};
+      uboLayoutBinding, textureLayoutBinding};
 
   vk::DescriptorSetLayoutCreateInfo layoutInfo{};
   layoutInfo.flags = {};
@@ -194,14 +171,18 @@ void Pipeline::CreateDescriptorSetLayout(Renderer::Device &device) {
 
 void Pipeline::CreateDescriptorPool(Renderer::Device &device,
                                     uint32_t maxFramesInFlight) {
-  vk::DescriptorPoolSize poolSize(vk::DescriptorType::eUniformBuffer,
-                                  maxFramesInFlight);
+  vk::DescriptorPoolSize uniPoolSize(vk::DescriptorType::eUniformBuffer,
+                                     maxFramesInFlight);
+  vk::DescriptorPoolSize texPoolSize(vk::DescriptorType::eCombinedImageSampler,
+                                     maxFramesInFlight);
+
+  std::array<vk::DescriptorPoolSize, 2> poolSize = {uniPoolSize, texPoolSize};
 
   vk::DescriptorPoolCreateInfo poolInfo{};
   poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
   poolInfo.maxSets = maxFramesInFlight;
-  poolInfo.poolSizeCount = 1;
-  poolInfo.pPoolSizes = &poolSize;
+  poolInfo.poolSizeCount = poolSize.size();
+  poolInfo.pPoolSizes = poolSize.data();
 
   m_DescriptorPool = vk::raii::DescriptorPool(device.GetDevice(), poolInfo);
 }
@@ -209,7 +190,7 @@ void Pipeline::CreateDescriptorPool(Renderer::Device &device,
 void Pipeline::CreateDescriptorSets(
     Renderer::Device &device, uint32_t maxFramesInFlight,
     std::vector<vk::raii::Buffer> &uniformBuffers,
-    size_t uniformBufferObjectSize) {
+    size_t uniformBufferObjectSize, Texture &texture) {
   std::vector<vk::DescriptorSetLayout> layouts(maxFramesInFlight,
                                                *m_DescriptorSetLayout);
   vk::DescriptorSetAllocateInfo allocInfo{};
@@ -226,15 +207,31 @@ void Pipeline::CreateDescriptorSets(
     bufferInfo.offset = 0;
     bufferInfo.range = uniformBufferObjectSize;
 
-    vk::WriteDescriptorSet descriptorWrite{};
-    descriptorWrite.dstSet = m_DescriptorSets[i];
-    descriptorWrite.dstBinding = 0;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
-    descriptorWrite.pBufferInfo = &bufferInfo;
+    vk::DescriptorImageInfo imageInfo{};
+    imageInfo.sampler = texture.getSampler();
+    imageInfo.imageView = texture.getImageView();
+    imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-    device.GetDevice().updateDescriptorSets(descriptorWrite, {});
+    vk::WriteDescriptorSet uboDescriptorWrite{};
+    uboDescriptorWrite.dstSet = m_DescriptorSets[i];
+    uboDescriptorWrite.dstBinding = 0;
+    uboDescriptorWrite.dstArrayElement = 0;
+    uboDescriptorWrite.descriptorCount = 1;
+    uboDescriptorWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+    uboDescriptorWrite.pBufferInfo = &bufferInfo;
+
+    vk::WriteDescriptorSet texDescriptorWrite{};
+    texDescriptorWrite.dstSet = m_DescriptorSets[i];
+    texDescriptorWrite.dstBinding = 1;
+    texDescriptorWrite.dstArrayElement = 0;
+    texDescriptorWrite.descriptorCount = 1;
+    texDescriptorWrite.descriptorType =
+        vk::DescriptorType::eCombinedImageSampler;
+    texDescriptorWrite.pImageInfo = &imageInfo;
+
+    std::array descriptorWrites{uboDescriptorWrite, texDescriptorWrite};
+
+    device.GetDevice().updateDescriptorSets(descriptorWrites, {});
   }
 }
 
