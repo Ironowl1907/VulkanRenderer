@@ -12,4 +12,8 @@ void createImage(Device &device, uint32_t width, uint32_t height,
                  vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties,
                  vk::raii::Image &image, vk::raii::DeviceMemory &imageMemory);
 
-}
+vk::raii::ImageView createImageView(Device &device, vk::raii::Image &image,
+                                    vk::Format format,
+                                    vk::ImageAspectFlagBits aspect);
+
+} // namespace Renderer

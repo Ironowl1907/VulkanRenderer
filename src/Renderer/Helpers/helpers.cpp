@@ -23,4 +23,12 @@ void createImage(Device &device, uint32_t width, uint32_t height,
   image.bindMemory(*imageMemory, 0);
 }
 
+vk::raii::ImageView createImageView(Device &device, vk::raii::Image &image,
+                                    vk::Format format,
+                                    vk::ImageAspectFlagBits aspect) {
+  vk::ImageViewCreateInfo viewInfo({}, image, vk::ImageViewType::e2D, format,
+                                   {}, {aspect, 0, 1, 0, 1});
+  return vk::raii::ImageView(device.GetDevice(), viewInfo);
+}
+
 } // namespace Renderer

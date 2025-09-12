@@ -4,6 +4,7 @@
 #include "../Device/Device.h"
 #include <cstring>
 #include <stdexcept>
+#include <vulkan/vulkan_enums.hpp>
 
 #include "../Helpers/helpers.h"
 
@@ -11,15 +12,6 @@
 #include <stb_image.h>
 
 namespace Renderer {
-
-vk::raii::ImageView Texture::createImageView(Device &device,
-                                             vk::raii::Image &image,
-                                             vk::Format format) {
-  vk::ImageViewCreateInfo viewInfo(
-      {}, image, vk::ImageViewType::e2D, format, {},
-      {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
-  return vk::raii::ImageView(device.GetDevice(), viewInfo);
-}
 
 Texture::Texture(BufferManager &bufferManager)
     : m_bufferManager(bufferManager) {}
@@ -108,7 +100,8 @@ bool Texture::createEmpty(Device &device, uint32_t width, uint32_t height,
 }
 
 void Texture::createTexImageView(Device &device, vk::Format format) {
-  m_imageView = createImageView(device, m_image, format);
+  m_imageView =
+      createImageView(device, m_image, format, vk::ImageAspectFlagBits::eColor);
 }
 
 void Texture::createSampler(Device &device) {

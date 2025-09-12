@@ -107,8 +107,9 @@ private:
                           vk::ImageUsageFlagBits::eDepthStencilAttachment,
                           vk::MemoryPropertyFlagBits::eDeviceLocal,
                           m_depthImage, m_depthImageMemory);
-    // m_depthImageView = createImageView(depthImage, depthFormat,
-    //                                    vk::ImageAspectFlagBits::eDepth);
+    m_depthImageView =
+        Renderer::createImageView(*m_DeviceHand, m_depthImage, depthFormat,
+                                  vk::ImageAspectFlagBits::eDepth);
   }
 
   vk::Format findSupportedFormat(const std::vector<vk::Format> &candidates,

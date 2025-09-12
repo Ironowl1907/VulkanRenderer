@@ -38,10 +38,6 @@ public:
   uint32_t getHeight() const { return m_height; }
   vk::Format getFormat() const { return m_format; }
 
-  // Helpers
-  static vk::raii::ImageView
-  createImageView(Device &device, vk::raii::Image &image, vk::Format format);
-
   void cleanup();
 
 private:
