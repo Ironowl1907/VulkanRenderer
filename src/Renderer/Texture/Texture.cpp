@@ -3,8 +3,9 @@
 #include "../Command/CommandPool.h"
 #include "../Device/Device.h"
 #include <cstring>
-#include <iostream>
 #include <stdexcept>
+
+#include "../Helpers/helpers.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -72,7 +73,7 @@ bool Texture::createFromData(Device &device, CommandPool &commandPool,
   createImage(device, m_width, m_height, m_format, vk::ImageTiling::eOptimal,
               vk::ImageUsageFlagBits::eTransferDst |
                   vk::ImageUsageFlagBits::eSampled,
-              vk::MemoryPropertyFlagBits::eDeviceLocal);
+              vk::MemoryPropertyFlagBits::eDeviceLocal, m_image, m_imageMemory);
 
   transitionImageLayout(device, commandPool, m_format,
                         vk::ImageLayout::eUndefined,
@@ -98,32 +99,12 @@ bool Texture::createEmpty(Device &device, uint32_t width, uint32_t height,
   m_format = format;
 
   createImage(device, width, height, format, vk::ImageTiling::eOptimal, usage,
-              vk::MemoryPropertyFlagBits::eDeviceLocal);
+              vk::MemoryPropertyFlagBits::eDeviceLocal, m_image, m_imageMemory);
 
   createTexImageView(device, format);
   createSampler(device);
 
   return true;
-}
-
-void Texture::createImage(Device &device, uint32_t width, uint32_t height,
-                          vk::Format format, vk::ImageTiling tiling,
-                          vk::ImageUsageFlags usage,
-                          vk::MemoryPropertyFlags properties) {
-
-  vk::ImageCreateInfo imageInfo({}, vk::ImageType::e2D, format,
-                                {width, height, 1}, 1, 1,
-                                vk::SampleCountFlagBits::e1, tiling, usage,
-                                vk::SharingMode::eExclusive, 0);
-
-  m_image = vk::raii::Image(device.GetDevice(), imageInfo);
-
-  vk::MemoryRequirements memRequirements = m_image.getMemoryRequirements();
-  vk::MemoryAllocateInfo allocInfo(
-      memRequirements.size,
-      device.FindMemoryType(memRequirements.memoryTypeBits, properties));
-  m_imageMemory = vk::raii::DeviceMemory(device.GetDevice(), allocInfo);
-  m_image.bindMemory(*m_imageMemory, 0);
 }
 
 void Texture::createTexImageView(Device &device, vk::Format format) {

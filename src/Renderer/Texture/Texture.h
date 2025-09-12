@@ -45,11 +45,6 @@ public:
   void cleanup();
 
 private:
-  void createImage(Device &device, uint32_t width, uint32_t height,
-                   vk::Format format, vk::ImageTiling tiling,
-                   vk::ImageUsageFlags usage,
-                   vk::MemoryPropertyFlags properties);
-
   void createTexImageView(Device &device, vk::Format format);
 
   void createSampler(Device &device);

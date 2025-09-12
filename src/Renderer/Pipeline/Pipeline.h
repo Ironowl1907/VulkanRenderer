@@ -11,7 +11,7 @@
 namespace Renderer {
 
 struct Vertex {
-  glm::vec2 pos;
+  glm::vec3 pos;
   glm::vec3 color;
   glm::vec2 texCoord;
 
@@ -23,10 +23,10 @@ struct Vertex {
   getAttributeDescriptions() {
     return {{
         vk::VertexInputAttributeDescription{
-            0,                         // location
-            0,                         // binding
-            vk::Format::eR32G32Sfloat, // format
-            offsetof(Vertex, pos)      // offset
+            0,                            // location
+            0,                            // binding
+            vk::Format::eR32G32B32Sfloat, // format
+            offsetof(Vertex, pos)         // offset
         },
         vk::VertexInputAttributeDescription{
             1,                            // location

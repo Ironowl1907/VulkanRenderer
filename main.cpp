@@ -1,13 +1,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
@@ -24,6 +24,7 @@
 #include "src/Renderer/Command/CommandBuffer.h"
 #include "src/Renderer/Command/CommandPool.h"
 #include "src/Renderer/Device/Device.h"
+#include "src/Renderer/Helpers/helpers.h"
 #include "src/Renderer/Instance/Instance.h"
 #include "src/Renderer/Pipeline/Pipeline.h"
 #include "src/Renderer/Swapchain/Swapchain.h"
@@ -37,14 +38,17 @@ constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 const std::vector validationLayers = {"VK_LAYER_KHRONOS_validation"};
 
 const std::vector<Renderer::Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-};
-const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-};
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
+
+const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
 struct UniformBufferObject {
   alignas(16) glm::mat4 model;
@@ -52,7 +56,7 @@ struct UniformBufferObject {
   alignas(16) glm::mat4 proj;
 };
 
-class HelloTriangleApplication {
+class RendererApp {
 public:
   void run() {
     m_Window = std::make_unique<Renderer::Window>(
@@ -91,6 +95,53 @@ private:
 
     m_CommandBuffers = m_CommandPool->allocatePrimary(MAX_FRAMES_IN_FLIGHT);
     createSyncObjects();
+
+    createDepthResources();
+  }
+
+  void createDepthResources() {
+    vk::Format depthFormat = findDepthFormat();
+    Renderer::createImage(*m_DeviceHand, m_SwapChain->GetExtend2D().width,
+                          m_SwapChain->GetExtend2D().height, depthFormat,
+                          vk::ImageTiling::eOptimal,
+                          vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                          vk::MemoryPropertyFlagBits::eDeviceLocal,
+                          m_depthImage, m_depthImageMemory);
+    // m_depthImageView = createImageView(depthImage, depthFormat,
+    //                                    vk::ImageAspectFlagBits::eDepth);
+  }
+
+  vk::Format findSupportedFormat(const std::vector<vk::Format> &candidates,
+                                 vk::ImageTiling tiling,
+                                 vk::FormatFeatureFlags features) {
+    for (const auto format : candidates) {
+      vk::FormatProperties props =
+          m_DeviceHand->GetPhysicalDevice().getFormatProperties(format);
+
+      if (tiling == vk::ImageTiling::eLinear &&
+          (props.linearTilingFeatures & features) == features) {
+        return format;
+      }
+      if (tiling == vk::ImageTiling::eOptimal &&
+          (props.optimalTilingFeatures & features) == features) {
+        return format;
+      }
+    }
+
+    throw std::runtime_error("failed to find supported format!");
+  }
+
+  vk::Format findDepthFormat() {
+    return findSupportedFormat(
+        {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
+         vk::Format::eD24UnormS8Uint},
+        vk::ImageTiling::eOptimal,
+        vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+  }
+
+  bool hasStencilComponent(vk::Format format) {
+    return format == vk::Format::eD32SfloatS8Uint ||
+           format == vk::Format::eD24UnormS8Uint;
   }
 
   void createIndexBuffer() {
@@ -169,7 +220,6 @@ private:
     m_RenderFinishedSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
     m_InFlightFences.reserve(MAX_FRAMES_IN_FLIGHT);
 
-    // for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     for (size_t i = 0; i < m_SwapChain->GetImages().size(); i++) {
       m_ImageAvailableSemaphores.emplace_back(
           m_DeviceHand->GetDevice().createSemaphore({}));
@@ -433,8 +483,8 @@ private:
 
   static void framebufferResizeCallback(GLFWwindow *window, int width,
                                         int height) {
-    auto app = reinterpret_cast<HelloTriangleApplication *>(
-        glfwGetWindowUserPointer(window));
+    auto app =
+        reinterpret_cast<RendererApp *>(glfwGetWindowUserPointer(window));
     app->SetResize(true);
   }
 
@@ -469,10 +519,15 @@ private:
   std::vector<vk::raii::Buffer> m_UniformBuffers;
   std::vector<vk::raii::DeviceMemory> m_UniformBuffersMemory;
   std::vector<void *> m_UniformBuffersMapped;
+
+  // Depth resources
+  vk::raii::Image m_depthImage = nullptr;
+  vk::raii::DeviceMemory m_depthImageMemory = nullptr;
+  vk::raii::ImageView m_depthImageView = nullptr;
 };
 
 int main() {
-  HelloTriangleApplication app;
+  RendererApp app;
 
   try {
     app.run();
