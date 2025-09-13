@@ -111,9 +111,11 @@ private:
         Renderer::createImageView(*m_DeviceHand, m_depthImage, depthFormat,
                                   vk::ImageAspectFlagBits::eDepth);
 
-    Renderer::transitionImageLayout(
-        *m_DeviceHand, *m_CommandPool, depthFormat, vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eTransferDstOptimal, m_depthImage);
+    // TODO: Maybe transition depth image layout
+    // Renderer::transitionImageLayout(
+    //     *m_DeviceHand, *m_CommandPool, depthFormat,
+    //     vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+    //     m_depthImage);
   }
 
   vk::Format findSupportedFormat(const std::vector<vk::Format> &candidates,
