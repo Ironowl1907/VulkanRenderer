@@ -37,6 +37,8 @@ target_link_libraries(Renderer
     Xxf86vm
     Xrandr
     Xi
+    m
+    stdc++
 )
 
 find_package(Threads REQUIRED)

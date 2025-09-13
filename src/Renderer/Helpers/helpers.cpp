@@ -42,8 +42,24 @@ void transitionImageLayout(Device &device, CommandPool &commandPool,
   barrier.newLayout = newLayout;
   barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image = image;
-  barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+  barrier.image = *image; // deref raii::Image
+
+  // Pick aspect mask based on format
+  if (format == vk::Format::eD16Unorm ||
+      format == vk::Format::eX8D24UnormPack32 ||
+      format == vk::Format::eD32Sfloat) {
+    barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+  } else if (format == vk::Format::eS8Uint) {
+    barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eStencil;
+  } else if (format == vk::Format::eD16UnormS8Uint ||
+             format == vk::Format::eD24UnormS8Uint ||
+             format == vk::Format::eD32SfloatS8Uint) {
+    barrier.subresourceRange.aspectMask =
+        vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+  } else {
+    barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+  }
+
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = 1;
   barrier.subresourceRange.baseArrayLayer = 0;
@@ -54,6 +70,7 @@ void transitionImageLayout(Device &device, CommandPool &commandPool,
 
   if (oldLayout == vk::ImageLayout::eUndefined &&
       newLayout == vk::ImageLayout::eTransferDstOptimal) {
+    // Undefined → TransferDst (for uploading to color images)
     barrier.srcAccessMask = {};
     barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
 
@@ -61,18 +78,28 @@ void transitionImageLayout(Device &device, CommandPool &commandPool,
     destinationStage = vk::PipelineStageFlagBits::eTransfer;
   } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
              newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+    // TransferDst → ShaderRead (sampling a texture)
     barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
     barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
     sourceStage = vk::PipelineStageFlagBits::eTransfer;
     destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+  } else if (oldLayout == vk::ImageLayout::eUndefined &&
+             newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+    // Undefined → DepthStencilAttachment (for depth images)
+    barrier.srcAccessMask = {};
+    barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                            vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+    sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
   } else {
-    throw std::invalid_argument("unsupported layout transition!");
+    throw std::invalid_argument("Unsupported layout transition!");
   }
 
   commandBuffer.pipelineBarrier(sourceStage, destinationStage, {},
-                                nullptr, // no memory barriers
-                                nullptr, // no buffer barriers
+                                nullptr, // memory barriers
+                                nullptr, // buffer barriers
                                 barrier  // single image barrier
   );
 
