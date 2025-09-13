@@ -45,10 +45,6 @@ private:
 
   void createSampler(Device &device);
 
-  void transitionImageLayout(Device &device, CommandPool &commandPool,
-                             vk::Format format, vk::ImageLayout oldLayout,
-                             vk::ImageLayout newLayout);
-
   void copyBufferToImage(Device &device, CommandPool &commandPool,
                          const vk::raii::Buffer &buffer, uint32_t width,
                          uint32_t height);

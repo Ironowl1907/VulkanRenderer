@@ -110,6 +110,10 @@ private:
     m_depthImageView =
         Renderer::createImageView(*m_DeviceHand, m_depthImage, depthFormat,
                                   vk::ImageAspectFlagBits::eDepth);
+
+    Renderer::transitionImageLayout(
+        *m_DeviceHand, *m_CommandPool, depthFormat, vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eTransferDstOptimal, m_depthImage);
   }
 
   vk::Format findSupportedFormat(const std::vector<vk::Format> &candidates,
@@ -138,11 +142,6 @@ private:
          vk::Format::eD24UnormS8Uint},
         vk::ImageTiling::eOptimal,
         vk::FormatFeatureFlagBits::eDepthStencilAttachment);
-  }
-
-  bool hasStencilComponent(vk::Format format) {
-    return format == vk::Format::eD32SfloatS8Uint ||
-           format == vk::Format::eD24UnormS8Uint;
   }
 
   void createIndexBuffer() {

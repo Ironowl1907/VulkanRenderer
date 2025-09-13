@@ -69,14 +69,13 @@ bool Texture::createFromData(Device &device, CommandPool &commandPool,
 
   transitionImageLayout(device, commandPool, m_format,
                         vk::ImageLayout::eUndefined,
-                        vk::ImageLayout::eTransferDstOptimal);
+                        vk::ImageLayout::eTransferDstOptimal, m_image);
 
-  // TODO: This implementation
   copyBufferToImage(device, commandPool, stagingBuffer, m_width, m_height);
 
   transitionImageLayout(device, commandPool, m_format,
                         vk::ImageLayout::eTransferDstOptimal,
-                        vk::ImageLayout::eShaderReadOnlyOptimal);
+                        vk::ImageLayout::eShaderReadOnlyOptimal, m_image);
 
   createTexImageView(device, m_format);
   createSampler(device);
@@ -128,63 +127,6 @@ void Texture::createSampler(Device &device) {
   samplerInfo.maxAnisotropy = 1.0f;
 
   m_sampler = vk::raii::Sampler(device.GetDevice(), samplerInfo);
-}
-
-void Texture::transitionImageLayout(Device &device, CommandPool &commandPool,
-                                    vk::Format format,
-                                    vk::ImageLayout oldLayout,
-                                    vk::ImageLayout newLayout) {
-  auto commandBuffer = commandPool.beginSingleTimeCommands(device);
-
-  vk::ImageMemoryBarrier barrier(
-      {}, {},
-      oldLayout,                           // oldLayout
-      newLayout,                           // newLayout
-      VK_QUEUE_FAMILY_IGNORED,             // srcQueueFamilyIndex
-      VK_QUEUE_FAMILY_IGNORED,             // dstQueueFamilyIndex
-      *m_image,                            // image
-      vk::ImageSubresourceRange(           // subresourceRange
-          vk::ImageAspectFlagBits::eColor, // aspectMask
-          0,                               // baseMipLevel
-          1,                               // levelCount
-          0,                               // baseArrayLayer
-          1                                // layerCount
-          ));
-
-  vk::PipelineStageFlags sourceStage;
-  vk::PipelineStageFlags destinationStage;
-
-  // Set access masks and pipeline stages based on layout transition
-  if (oldLayout == vk::ImageLayout::eUndefined &&
-      newLayout == vk::ImageLayout::eTransferDstOptimal) {
-    barrier.srcAccessMask = {};
-    barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-    sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-    destinationStage = vk::PipelineStageFlagBits::eTransfer;
-  } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
-             newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-    sourceStage = vk::PipelineStageFlagBits::eTransfer;
-    destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-  } else if (oldLayout == vk::ImageLayout::eUndefined &&
-             newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-    barrier.srcAccessMask = {};
-    barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                            vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-
-    sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-    destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-  } else {
-    throw std::invalid_argument("Unsupported layout transition!");
-  }
-
-  commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, nullptr,
-                                barrier);
-
-  commandPool.endSingleTimeCommands(device, commandBuffer);
 }
 
 void Texture::copyBufferToImage(Device &device, CommandPool &commandPool,
