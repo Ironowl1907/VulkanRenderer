@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -101,15 +102,23 @@ private:
 
   void createDepthResources() {
     vk::Format depthFormat = findDepthFormat();
-    Renderer::createImage(*m_DeviceHand, m_SwapChain->GetExtend2D().width,
-                          m_SwapChain->GetExtend2D().height, depthFormat,
-                          vk::ImageTiling::eOptimal,
-                          vk::ImageUsageFlagBits::eDepthStencilAttachment,
-                          vk::MemoryPropertyFlagBits::eDeviceLocal,
-                          m_depthImage, m_depthImageMemory);
-    m_depthImageView =
-        Renderer::createImageView(*m_DeviceHand, m_depthImage, depthFormat,
-                                  vk::ImageAspectFlagBits::eDepth);
+    int numImages = m_SwapChain->GetImages().size();
+
+    for (int i = 0; i < numImages; ++i) {
+      m_depthImageViews.emplace_back(nullptr);
+      m_depthImages.emplace_back(nullptr);
+      m_depthImageMemories.emplace_back(nullptr);
+
+      Renderer::createImage(*m_DeviceHand, m_SwapChain->GetExtend2D().width,
+                            m_SwapChain->GetExtend2D().height, depthFormat,
+                            vk::ImageTiling::eOptimal,
+                            vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                            vk::MemoryPropertyFlagBits::eDeviceLocal,
+                            m_depthImages[i], m_depthImageMemories[i]);
+      m_depthImageViews[i] = Renderer::createImageView(
+          *m_DeviceHand, m_depthImages[i], depthFormat,
+          vk::ImageAspectFlagBits::eDepth);
+    }
 
     // TODO: Maybe transition depth image layout
     // Renderer::transitionImageLayout(
@@ -523,9 +532,9 @@ private:
   std::vector<void *> m_UniformBuffersMapped;
 
   // Depth resources
-  vk::raii::Image m_depthImage = nullptr;
-  vk::raii::DeviceMemory m_depthImageMemory = nullptr;
-  vk::raii::ImageView m_depthImageView = nullptr;
+  std::vector<vk::raii::Image> m_depthImages;
+  std::vector<vk::raii::DeviceMemory> m_depthImageMemories;
+  std::vector<vk::raii::ImageView> m_depthImageViews;
 };
 
 int main() {
